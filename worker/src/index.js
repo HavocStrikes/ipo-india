@@ -11,6 +11,7 @@
  *   POST /api/subscribe         -> { email, preferences } (welcome email)
  *   GET  /api/subscribers/count -> subscriber count
  *   GET  /api/unsubscribe       -> one-click unsubscribe (signed link)
+ *   GET  /api/alerts/status     -> ops view of the alert pipeline (no PII)
  *   GET  /healthz
  *
  * Architecture notes (free-plan friendly):
@@ -38,24 +39,12 @@ import {
   unsubscribeToken,
 } from './subscribers.js';
 import { sendMail, welcomeEmail, isMailConfigured, providerName } from './mail.js';
+import { isNotableName } from './notable.js';
+import { runAlerts, alertStatus } from './alerts.js';
 
 const DETAIL_TTL_SECONDS = 30 * 60; // scraped detail + merged record cache
 
-/** Famous/Notable IPOs that people search for — deep history for these. */
-const NOTABLE_NAMES = [
-  'zomato', 'swiggy', 'paytm', 'one97', 'lic', 'life insurance',
-  'oyo', 'phonepe', 'flipkart', 'jio', 'reliance jio',
-  'delhivery', 'nykaa', 'fsn e-ventures', 'idea',
-  'sbi cards', 'policybazaar', 'pb fintech',
-  'hdfc bank', 'hdfc life', 'icici lombard',
-  'tata motors', 'tata technologies', 'hyundai',
-  'coal india', 'rec limited', 'pfc',
-];
-
-const nameMatches = (name) => {
-  const n = String(name || '').toLowerCase();
-  return NOTABLE_NAMES.some((k) => n.includes(k));
-};
+const nameMatches = isNotableName; // shared watchlist (worker/src/notable.js)
 
 function windowDays(env) {
   return Number(env.WINDOW_DAYS || 31);
@@ -546,6 +535,14 @@ async function handleApi(request, env, ctx, url) {
     return json({ count: await countSubscribers(env) });
   }
 
+  if (p === '/api/alerts/status') {
+    return json({
+      mailConfigured: isMailConfigured(env),
+      provider: providerName(env),
+      ...(await alertStatus(env)),
+    });
+  }
+
   if (p === '/api/unsubscribe') {
     const email = (url.searchParams.get('email') || '').trim().toLowerCase();
     const token = url.searchParams.get('token') || '';
@@ -587,5 +584,21 @@ export default {
 
   async scheduled(controller, env, ctx) {
     await refreshData(env);
+
+    // Alert pipeline: runs only on ODD 10-minute slots (minutes 10/30/50).
+    // Even slots also do the heavy deep-history refresh, and the free plan
+    // caps one invocation at 50 subrequests (KV ops + email API calls count).
+    // ALERTS_EVERY_RUN=1 in .dev.vars overrides for local testing.
+    const slot = Math.floor(new Date().getUTCMinutes() / 10);
+    if (slot % 2 === 1 || String(env.ALERTS_EVERY_RUN || '') === '1') {
+      try {
+        const stats = await runAlerts(env);
+        if (stats && (stats.initialized || stats.enqueued || stats.sent || stats.failed || stats.dropped)) {
+          console.log('[alerts]', JSON.stringify(stats));
+        }
+      } catch (err) {
+        console.error('[alerts] run failed:', err && (err.stack || err.message || err));
+      }
+    }
   },
 };

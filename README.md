@@ -165,6 +165,32 @@ node send-update.js --subject "Test" --text "Hi" --only you@example.com   # safe
 Every email (welcome + broadcast) carries a signed one-click unsubscribe link
 (`GET /api/unsubscribe?email=…&token=…`) that removes the address from the store.
 
+### Automatic IPO alerts (Worker)
+
+On the Worker, the 10-minute cron also runs an **alert pipeline** (on odd slots,
+to stay inside free-plan subrequest limits) built from `worker/src/alerts.js`:
+
+| Event      | Who gets it                   | When                                             |
+| ---------- | ----------------------------- | ------------------------------------------------ |
+| 🔔 Open    | `upcoming` subscribers        | An IPO's status flips to *open* (≤1 day old)     |
+| ⏳ Closing | `upcoming` subscribers        | The day before an open IPO closes (once)         |
+| 📊 Listed  | `upcoming` subscribers        | An IPO lists, with issue vs listing price (+/-%) |
+| 🔬 Deep    | `analysis` subscribers        | A notable watchlist IPO opens                    |
+| 🗓 Digest  | `weeklyDigest` subscribers    | First cron run of each ISO week with content     |
+
+Design notes:
+
+- **No cold-start spam** — the first run only snapshots statuses; alerts fire on
+  *transitions* after that, and stale events (older than ~1 day) are skipped.
+- **Exactly-once** — every event is keyed (`open:<id>:<date>`, `digest:<ISO-week>`)
+  and recorded in KV `alerts:state.sentKeys`; emails queue in `alerts:queue`
+  and drip-send (default 10/run via `ALERT_SEND_BUDGET`), retrying failures up
+  to 10 times before dropping.
+- **Provider-agnostic** — with no mail key configured, events still flow and the
+  queue backs up; adding a provider key later drains the backlog automatically.
+- Ops visibility: `GET /api/alerts/status` (no PII — counts only).
+
+
 ## API
 
 | Endpoint             | Description                                             |
@@ -175,6 +201,7 @@ Every email (welcome + broadcast) carries a signed one-click unsubscribe link
 | `GET /healthz`       | Liveness probe                                          |
 | `POST /api/subscribe` | Subscribe for updates — JSON `{ email, preferences }`  |
 | `GET /api/subscribers/count` | How many people subscribed (no emails exposed)  |
+| `GET /api/alerts/status` | Alert-pipeline ops view (mail configured, queue depth) |
 | `GET /api/unsubscribe` | One-click unsubscribe (signed link from emails)      |
 
 ## Disclaimer
