@@ -12,6 +12,22 @@
 
 const DEV_FALLBACK_SECRET = 'ipo-india-local-secret';
 
+// Single-blob copy of all subscriber records. The alert/digest pipeline reads
+// ONE KV key instead of one read per subscriber — that keeps cron runs well
+// under the free-plan subrequest cap as the list grows. Maintained alongside
+// the per-email keys + index on every add/remove; migrated lazily on read.
+const RECORDS_KEY = 'subs:records';
+
+async function readRecords(env) {
+  const raw = await env.DATA.get(RECORDS_KEY);
+  const arr = raw ? JSON.parse(raw) : null;
+  return Array.isArray(arr) ? arr : null;
+}
+
+async function writeRecords(env, records) {
+  await env.DATA.put(RECORDS_KEY, JSON.stringify(records));
+}
+
 function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
@@ -54,6 +70,11 @@ async function addSubscriber(env, email, preferences = {}) {
   await env.DATA.put(`sub:${cleanEmail}`, JSON.stringify(record));
   if (!index.includes(cleanEmail)) index.push(cleanEmail);
   await env.DATA.put('subs:index', JSON.stringify(index));
+  const records = (await readRecords(env)) || [];
+  const ri = records.findIndex((r) => r && r.email === cleanEmail);
+  if (ri >= 0) records[ri] = record;
+  else records.push(record);
+  await writeRecords(env, records);
   return { already: false, total: index.length };
 }
 
@@ -65,6 +86,9 @@ async function removeSubscriber(env, email) {
   if (kept.length === index.length) return { removed: false, total: index.length };
   await env.DATA.delete(`sub:${clean}`);
   await env.DATA.put('subs:index', JSON.stringify(kept));
+  const records = (await readRecords(env)) || [];
+  const filtered = records.filter((r) => r && r.email !== clean);
+  if (filtered.length !== records.length) await writeRecords(env, filtered);
   return { removed: true, total: kept.length };
 }
 
@@ -89,4 +113,13 @@ async function getAll(env) {
   return out;
 }
 
-export { addSubscriber, removeSubscriber, count, getAll, isValidEmail, unsubscribeToken };
+/** All subscriber records from the blob store (lazily migrated from per-email keys). */
+async function getAllRecords(env) {
+  const records = await readRecords(env);
+  if (records) return records;
+  const rebuilt = await getAll(env);
+  await writeRecords(env, rebuilt);
+  return rebuilt;
+}
+
+export { addSubscriber, removeSubscriber, count, getAll, getAllRecords, isValidEmail, unsubscribeToken };

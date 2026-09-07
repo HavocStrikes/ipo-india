@@ -35,7 +35,8 @@
     "HISTORY_YEARS": "1",
     "NOTABLE_HISTORY_YEARS": "5",
     "SUB_RATE_MAX": "8",
-    "MAIL_FROM_NAME": "IPO India"
+    "MAIL_FROM_NAME": "IPO India",
+    "SITE_URL": "https://ipo-india.ravi-ipodecode.workers.dev"
     // Optional per-provider mail keys are SECRETS, set via:
     //   npx wrangler secret put RESEND_API_KEY      (or SENDGRID_API_KEY / BREVO_API_KEY)
     //   npx wrangler secret put MAIL_FROM           ("no-reply@yourdomain.com")
