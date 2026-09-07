@@ -88,6 +88,10 @@ same `public/` build serves from both hosts:
 | GitHub Pages        | `https://<user>.github.io/ipo-india/`      | static UI, API calls go cross-origin to the Worker |
 | Cloudflare Worker   | `https://ipo-india.<your-subdomain>.workers.dev` | UI + API together, always current            |
 
+Pages caveat: static hosts have no SPA fallback, so a *refreshed or shared*
+`/ipo-india/ipo/:id` link bounces home via `public/404.html` (in-app navigation
+is unaffected). Full deep links work on the Worker URL — use it for sharing.
+
 ## Curated windows (Groww-style)
 
 - **Upcoming** — IPOs whose bid opens within the next 31 days (default tab).

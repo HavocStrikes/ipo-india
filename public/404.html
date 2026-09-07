@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IPO India — redirecting…</title>
+  <script>
+    // GitHub Pages has no SPA fallback: an unknown path (e.g. /ipo-india/ipo/123)
+    // lands here. Compute the site base (same rule as index.html) and go home.
+    // In-app navigation is unaffected; full deep links work on the Worker URL.
+    (function () {
+      var m = location.pathname.match(/^(.*?)(\/ipo\/.*)?$/);
+      var b = m && m[1] ? m[1] : '/';
+      if (b.charAt(b.length - 1) !== '/') b += '/';
+      location.replace(b);
+    })();
+  </script>
+</head>
+<body>
+  <p style="font-family: sans-serif; padding: 2rem; color: #888;">Page not found — returning to IPO India…</p>
+</body>
+</html>
