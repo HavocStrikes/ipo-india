@@ -188,10 +188,33 @@
       .catch((e) => setLive(null, e));
   }
 
+  /** Paint /api/meta counters into the current list view without a re-render
+   *  (keeps filters, typed search, scroll and loaded cards untouched). */
+  function updateCounts() {
+    const m = state.meta;
+    if (!m || !m.counts) return;
+    app.querySelectorAll('.chip[data-tab]').forEach((c) => {
+      const n = c.querySelector('.n');
+      if (n) n.textContent = m.counts[c.dataset.tab] ?? 0;
+    });
+    app.querySelectorAll('.tab[data-tab]').forEach((t) => {
+      const cnt = t.querySelector('.cnt');
+      if (cnt) cnt.textContent = state.all ? 'all' : (m.counts[t.dataset.tab] ?? 0);
+    });
+    const showAll = $('#showAll');
+    if (showAll && m.total) showAll.textContent = `View full archive (${m.total} IPOs)`;
+  }
+
   /* ---------------- list view ---------------- */
   function renderList({ keep = false } = {}) {
     document.title = 'IPO India — Live Upcoming & Listed IPOs with Scores';
-    if (keep && app.dataset.view === 'list' && state.meta) return;
+    if (keep && app.dataset.view === 'list' && state.meta) {
+      // Meta refresh arrived for an already-rendered list: update the numbers
+      // in place instead of rebuilding the page (the old code returned without
+      // touching the DOM, so hero/tab counts stayed at 0 until a click).
+      updateCounts();
+      return;
+    }
     app.dataset.view = 'list';
     const m = state.meta || { counts: {}, windowDays: 31, total: 0 };
     const winDays = m.windowDays || 31;
