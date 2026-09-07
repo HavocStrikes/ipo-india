@@ -1,0 +1,46 @@
+name: Deploy frontend to GitHub Pages
+
+# Serves the static frontend (public/). The JSON API stays on Cloudflare
+# Workers. Set the repo variable IPO_API_BASE to the Worker URL so the
+# deployed frontend knows where to call:
+#   gh variable set IPO_API_BASE --body "https://ipo-india.<sub>.workers.dev"
+on:
+  push:
+    branches: [main]
+    paths: ['public/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point the frontend at the Worker API
+        run: |
+          if [ -n "${{ vars.IPO_API_BASE }}" ]; then
+            sed -i "s|apiBase: ''|apiBase: '${{ vars.IPO_API_BASE }}'|" public/config.js
+            echo "apiBase = ${{ vars.IPO_API_BASE }}"
+          else
+            echo "WARNING: repo variable IPO_API_BASE is not set — the frontend"
+            echo "will call same-origin /api, which 404s on Pages."
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4

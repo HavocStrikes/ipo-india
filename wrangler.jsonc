@@ -1,0 +1,48 @@
+// Cloudflare Worker configuration — IPO India Tracker
+// Deploy: npx wrangler deploy   (local dev: npx wrangler dev --port 8788)
+//
+// DATA (KV) holds: per-year records/summaries, notable IPOs, scraped detail
+// cache and the subscriber store. The KV namespace id is filled after
+//   npx wrangler kv namespace create DATA
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ipo-india",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-09-01",
+
+  // Serve public/ as static assets + SPA fallback for /ipo/:id deep links.
+  // run_worker_first sends /api/* and /healthz to the Worker; everything else
+  // is served straight from the asset store.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/healthz", "/__scheduled"]
+  },
+
+  "kv_namespaces": [
+    { "binding": "DATA", "id": "aa6c7e673f224058a381eeee7b9129f8" }
+  ],
+
+  // Refresh the live dataset every 10 minutes (same cadence as server.js).
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
+  "vars": {
+    "REFRESH_MINUTES": "10",
+    "WINDOW_DAYS": "31",
+    "HISTORY_YEARS": "1",
+    "NOTABLE_HISTORY_YEARS": "5",
+    "SUB_RATE_MAX": "8",
+    "MAIL_FROM_NAME": "IPO India"
+    // Optional per-provider mail keys are SECRETS, set via:
+    //   npx wrangler secret put RESEND_API_KEY      (or SENDGRID_API_KEY / BREVO_API_KEY)
+    //   npx wrangler secret put MAIL_FROM           ("no-reply@yourdomain.com")
+    //   npx wrangler secret put SUBSCRIBE_SECRET    (random string; signs unsubscribe links)
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
