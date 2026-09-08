@@ -11,7 +11,7 @@
  *   POST /api/subscribe         -> { email, preferences } (welcome email)
  *   GET  /api/subscribers/count -> subscriber count
  *   GET  /api/unsubscribe       -> one-click unsubscribe (signed link)
- *   GET  /api/alerts/status     -> ops view of the alert pipeline (no PII)
+ *   GET  /api/alerts/status     -> ops view of the Mainboard alert pipeline (no PII)
  *   GET  /healthz
  *
  * Architecture notes (free-plan friendly):
@@ -40,7 +40,7 @@ import {
 } from './subscribers.js';
 import { sendMail, welcomeEmail, isMailConfigured, providerName } from './mail.js';
 import { isNotableName } from './notable.js';
-import { runAlerts, alertStatus } from './alerts.js';
+import { runMainboardAlerts, mainboardAlertStatus } from './mainboard-alerts.js';
 
 const DETAIL_TTL_SECONDS = 30 * 60; // scraped detail + merged record cache
 
@@ -94,11 +94,12 @@ function summarize(ipo) {
     issueAmountCr: ipo.issueAmountCr ?? null,
     subscriptionX: ipo.subscriptionX ?? null,
     listingGainPct: ipo.listingGainPct ?? (ipo.listing && ipo.listing.gainPct) ?? null,
+    listingOpenPrice: ipo.listingOpenPrice ?? (ipo.listing && ipo.listing.openPrice) ?? null,
     marketPrice: ipo.marketPrice ?? (ipo.market && ipo.market.price) ?? null,
     pePost: ipo.pePost ?? (ipo.kpi && ipo.kpi.pePost) ?? null,
     ronw: ipo.ronw ?? (ipo.kpi && (ipo.kpi.ronw ?? ipo.kpi.roe)) ?? null,
     score: ipo.score
-      ? { score: ipo.score.score, verdict: ipo.score.verdict, tone: ipo.score.tone, confidence: ipo.score.confidence }
+      ? { score: ipo.score.score, verdict: ipo.score.verdict, tone: ipo.score.tone, confidence: ipo.score.confidence, pillars: ipo.score.pillars || null }
       : null,
     detailUrl: ipo.detailUrl ?? null,
     nseSymbol: ipo.nseSymbol ?? null,
@@ -539,7 +540,7 @@ async function handleApi(request, env, ctx, url) {
     return json({
       mailConfigured: isMailConfigured(env),
       provider: providerName(env),
-      ...(await alertStatus(env)),
+      ...(await mainboardAlertStatus(env)),
     });
   }
 
@@ -585,19 +586,18 @@ export default {
   async scheduled(controller, env, ctx) {
     await refreshData(env);
 
-    // Alert pipeline: runs only on ODD 10-minute slots (minutes 10/30/50).
-    // Even slots also do the heavy deep-history refresh, and the free plan
-    // caps one invocation at 50 subrequests (KV ops + email API calls count).
-    // ALERTS_EVERY_RUN=1 in .dev.vars overrides for local testing.
+    // Mainboard-only IPO alert pipeline (replaces the older all-category
+    // alerts.js hook, which would double-send and leak SME emails).
+    // MAINBOARD_ALERTS_EVERY_RUN=1 in .dev.vars overrides for local testing.
     const slot = Math.floor(new Date().getUTCMinutes() / 10);
-    if (slot % 2 === 1 || String(env.ALERTS_EVERY_RUN || '') === '1') {
+    if (slot % 2 === 1 || String(env.MAINBOARD_ALERTS_EVERY_RUN || '') === '1') {
       try {
-        const stats = await runAlerts(env);
-        if (stats && (stats.initialized || stats.enqueued || stats.sent || stats.failed || stats.dropped)) {
-          console.log('[alerts]', JSON.stringify(stats));
+        const stats = await runMainboardAlerts(env);
+        if (stats && (stats.sent || stats.pending || stats.reason === 'no_subscribers' || stats.events)) {
+          console.log('[mainboard-alerts]', JSON.stringify(stats));
         }
       } catch (err) {
-        console.error('[alerts] run failed:', err && (err.stack || err.message || err));
+        console.error('[mainboard-alerts] run failed:', err && (err.stack || err.message || err));
       }
     }
   },

@@ -57,6 +57,35 @@ npx wrangler secret put MAIL_FROM         # "no-reply@yourdomain.com"
 npx wrangler secret put SUBSCRIBE_SECRET  # random string; signs unsubscribe links
 ```
 
+### Automatic IPO alerts (Mainboard-only)
+
+Once a provider secret is set, the Worker sends branded score-analysis emails
+automatically — **strictly for Mainboard IPOs; SME / NSE Emerge / BSE SME
+issues are never emailed**, so your provider quota isn't wasted:
+
+| Email | Trigger |
+| ----- | ------- |
+| 🔔 Open | a Mainboard IPO's bidding opens (score + 5-pillar breakdown) |
+| 📊 Listed | a Mainboard IPO lists (with listing open price and gain%) |
+
+Each email carries the 0–100 score, the verdict, the 5-pillar breakdown, the
+price band and issue size, and a CTA straight to the IPO detail page
+(`${SITE_URL}/ipo/:id`). Subscribers pick which emails they want with the
+preference checkboxes on the subscribe form; every message has a signed
+one-click unsubscribe link.
+
+**Dedup & safety rails:**
+- KV tracks notified IPO IDs — no subscriber ever gets the same event twice.
+- A cold start seeds the notified lists with everything already open/listed, so
+  a fresh deploy never blasts historical IPOs.
+- Failed sends retry up to 5 times, then give up (and log a warning) instead of
+  looping forever.
+- The pipeline runs on odd 10-minute cron slots, capped to 10 Brevo calls and a
+  hard ceiling of 16 subrequests per run — well inside the 50-subrequest
+  free-plan limit.
+
+Monitor at `GET /api/alerts/status`.
+
 Local dev with real upstream data: `npm run worker:dev` (port 8788), then
 open http://localhost:8788. Trigger the cron handler manually with
 `curl 'http://localhost:8788/__scheduled?cron=*/10+*+*+*+*'` (needs
