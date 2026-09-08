@@ -194,30 +194,51 @@ node send-update.js --subject "Test" --text "Hi" --only you@example.com   # safe
 Every email (welcome + broadcast) carries a signed one-click unsubscribe link
 (`GET /api/unsubscribe?email=…&token=…`) that removes the address from the store.
 
-### Automatic IPO alerts (Worker)
+### Automatic Mainboard IPO alerts (Worker)
 
-On the Worker, the 10-minute cron also runs an **alert pipeline** (on odd slots,
-to stay inside free-plan subrequest limits) built from `worker/src/alerts.js`:
+On the Worker, the 10-minute cron also runs a **Mainboard-only alert pipeline**
+(on odd slots, to stay inside free-plan subrequest limits) built from
+`worker/src/mainboard-alerts.js`. It watches the refreshed dataset for
+lifecycle transitions and emails subscribers — **SME / NSE Emerge / BSE SME
+issues are skipped entirely**, so daily email quotas are never wasted.
 
-| Event      | Who gets it                   | When                                             |
-| ---------- | ----------------------------- | ------------------------------------------------ |
-| 🔔 Open    | `upcoming` subscribers        | An IPO's status flips to *open* (≤1 day old)     |
-| ⏳ Closing | `upcoming` subscribers        | The day before an open IPO closes (once)         |
-| 📊 Listed  | `upcoming` subscribers        | An IPO lists, with issue vs listing price (+/-%) |
-| 🔬 Deep    | `analysis` subscribers        | A notable watchlist IPO opens                    |
-| 🗓 Digest  | `weeklyDigest` subscribers    | First cron run of each ISO week with content     |
+| Email            | Trigger                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| 📡 **Open**      | A **Mainboard** IPO's status flips to *open* (≤1 day old)          |
+| 📊 **Listed**    | A **Mainboard** IPO lists, with issue vs listing price (+/-%)      |
 
-Design notes:
+Each email carries the company name with a **MAINBOARD** badge, price band &
+issue size, the 0–100 investability score + verdict, the full 5-pillar score
+breakdown (Demand, Fundamentals, Valuation, Performance, Sentiment), key
+metrics (P/E post-issue, RoNW, EPS pre-IPO), a direct **View Full Analysis**
+CTA button linking to `${SITE_URL}/ipo/${id}`, and a signed one-click
+unsubscribe footer.
 
-- **No cold-start spam** — the first run only snapshots statuses; alerts fire on
-  *transitions* after that, and stale events (older than ~1 day) are skipped.
-- **Exactly-once** — every event is keyed (`open:<id>:<date>`, `digest:<ISO-week>`)
-  and recorded in KV `alerts:state.sentKeys`; emails queue in `alerts:queue`
-  and drip-send (default 10/run via `ALERT_SEND_BUDGET`), retrying failures up
-  to 10 times before dropping.
-- **Provider-agnostic** — with no mail key configured, events still flow and the
-  queue backs up; adding a provider key later drains the backlog automatically.
-- Ops visibility: `GET /api/alerts/status` (no PII — counts only).
+**Strict category filtering** — `ipo.category.toLowerCase() === 'mainboard'`
+gates every step (event detection, email build, dispatch). SME issues never
+trigger an alert.
+
+**State tracking (KV `env.DATA`)** — `notified_open_ipos` and
+`notified_listed_ipos` record every IPO ID that has been successfully
+dispatched, so the same open/listed event never sends twice. IDs are recorded
+*only after a successful send* — if all sends fail (e.g. provider error), the
+event stays unnotified and automatically retries on the next cron.
+
+**Pacing** — sends are budgeted per run (`min(8, floor(40 / subscribers))`)
+to stay well under Cloudflare's 50-subrequest cron cap (KV reads + Brevo API
+calls both count).
+
+**Graceful fallbacks** — the pipeline exits cleanly without crashing if
+`BREVO_API_KEY` / `MAIL_FROM` is missing (`{ reason: 'no_provider' }`) or if
+no subscribers exist (`{ reason: 'no_subscribers' }`).
+
+**Setup:**
+```bash
+npx wrangler secret put BREVO_API_KEY
+npx wrangler secret put MAIL_FROM        # "IPO India <no-reply@yourdomain.com>"
+```
+
+Ops visibility: `GET /api/alerts/status` (no PII — counts only).
 
 
 ## API
@@ -230,7 +251,7 @@ Design notes:
 | `GET /healthz`       | Liveness probe                                          |
 | `POST /api/subscribe` | Subscribe for updates — JSON `{ email, preferences }`  |
 | `GET /api/subscribers/count` | How many people subscribed (no emails exposed)  |
-| `GET /api/alerts/status` | Alert-pipeline ops view (mail configured, queue depth) |
+| `GET /api/alerts/status` | Mainboard-alert ops view (mail configured, notified counts, subscribers) |
 | `GET /api/unsubscribe` | One-click unsubscribe (signed link from emails)      |
 
 ## Disclaimer
