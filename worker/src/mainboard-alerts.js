@@ -133,7 +133,7 @@ export async function runMainboardAlerts(env) {
       if (sent + failed >= budget) break; // budget exhausted — remaining events retry next run
       const html = buildEmail(ev.type, ev.ipo, site, unsubUrls.get(sub.email));
       const subject = ev.type === 'open' ? '📡 ' + ev.ipo.name + ' IPO is OPEN — Score Analysis' : '📊 ' + ev.ipo.name + ' LISTED Today — Result';
-      const res = await sendMail(env, { to: sub.email, subject, html, text: ev.ipo.name + (ev.type === 'open' ? ' IPO open' : ' listed') + '. View: ' + site + '/ipo/' + ev.ipo.id });
+      const res = await sendMail(env, { to: sub.email, subject, html, text: ev.ipo.name + (ev.type === 'open' ? ' IPO open' : ' listed') + '. View: ' + site + '/ipo/' + ev.ipo.id, unsubscribeUrl: unsubUrls.get(sub.email) });
       if (res.sent) { sent++; evSent++; } else failed++;
     }
     // Only mark as notified once at least one email dispatched successfully (req #6).

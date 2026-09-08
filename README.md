@@ -194,6 +194,29 @@ node send-update.js --subject "Test" --text "Hi" --only you@example.com   # safe
 Every email (welcome + broadcast) carries a signed one-click unsubscribe link
 (`GET /api/unsubscribe?email=…&token=…`) that removes the address from the store.
 
+### Deliverability — getting into Gmail's Primary tab (not Promotional)
+
+The code sends the right headers (`List-Unsubscribe` per RFC 8058,
+`List-Unsubscribe-Post: List-Unsubscribe=One-Click`, `Precedence: list`,
+`X-Auto-Response-Suppress: All`) — Gmail reads these as strong "transactional
+notification" signals. But headers alone won't do it; the **sending domain** must
+be authenticated, or Gmail will file you under Promotional regardless.
+
+Do all three:
+
+1. **Use a custom domain in `MAIL_FROM`** — never a free address (`@gmail.com`,
+   `@yahoo.com`, `@outlook.com`). Buy a domain (≈$10/yr) and use
+   `no-reply@yourdomain.com`. This is the single biggest lever.
+2. **Verify the sender domain in your provider's dashboard** — Brevo:
+   *Senders and IP* → *Domains* → add domain → it gives you DNS records to add.
+3. **Add the SPF + DKIM + DMARC DNS records** your provider gives you. They
+   prove you own the domain and are authorized to send mail from it. Without
+   them, Gmail treats you as unauthenticated → Promotional/Spam.
+
+Once those are in place (DNS propagation takes a few minutes to 48h), Gmail
+starts trusting the `List-Unsubscribe` header and routes your alerts to the
+Primary tab. Until then, the emails still *arrive* — just under Promotional.
+
 ### Automatic Mainboard IPO alerts (Worker)
 
 On the Worker, the 10-minute cron also runs a **Mainboard-only alert pipeline**

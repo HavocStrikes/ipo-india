@@ -9,6 +9,12 @@
  *   MAIL_FROM  — "no-reply@yourdomain.com" or "IPO India <no-reply@yourdomain.com>"
  *   MAIL_FROM_NAME — optional display name (default "IPO India")
  *
+ * DELIVERABILITY: To land in Gmail's Primary tab (not Promotional), you MUST:
+ *   1. Use a custom domain in MAIL_FROM (never @gmail.com/@yahoo.com).
+ *   2. Verify the sender domain in your provider's dashboard (Brevo: senders → add domain).
+ *   3. Set up SPF + DKIM + DMARC DNS records for that domain (provider gives you the values).
+ *   4. The code below adds List-Unsubscribe headers (RFC 8058) — Gmail reads these.
+ *
  * With no key configured the Worker still runs; sendMail() reports
  * { sent: false, reason: 'not_configured' } and subscriptions keep working.
  */
@@ -44,12 +50,32 @@ function providerName(env) {
   return p ? p.name : 'none';
 }
 
+/**
+ * Build headers that signal "transactional notification" to Gmail and others.
+ * The List-Unsubscribe header (RFC 8058) is the single most important one —
+ * Gmail uses it as a strong positive signal for the Primary tab.
+ */
+function deliverabilityHeaders(unsubscribeUrl) {
+  const headers = {
+    'Precedence': 'list',
+    'X-Auto-Response-Suppress': 'All',
+    'X-MC-Track': 'opens,clicks',
+  };
+  if (unsubscribeUrl) {
+    headers['List-Unsubscribe'] = `<${unsubscribeUrl}>`;
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
+  return headers;
+}
+
 /** Send one email. Never throws — returns { sent, provider?, reason?, detail? }. */
-async function sendMail(env, { to, subject, html, text }) {
+async function sendMail(env, { to, subject, html, text, unsubscribeUrl }) {
   const prov = provider(env);
   const from = fromHeader(env);
   if (!prov) return { sent: false, reason: 'not_configured' };
   if (!from.email) return { sent: false, reason: 'missing_mail_from' };
+
+  const headers = deliverabilityHeaders(unsubscribeUrl);
 
   let url;
   let init;
@@ -64,6 +90,7 @@ async function sendMail(env, { to, subject, html, text }) {
         subject,
         html,
         text,
+        headers,
       }),
     };
   } else if (prov.name === 'sendgrid') {
@@ -79,6 +106,7 @@ async function sendMail(env, { to, subject, html, text }) {
           ...(text ? [{ type: 'text/plain', value: text }] : []),
           ...(html ? [{ type: 'text/html', value: html }] : []),
         ],
+        headers,
       }),
     };
   } else {
@@ -92,6 +120,7 @@ async function sendMail(env, { to, subject, html, text }) {
         subject,
         htmlContent: html,
         textContent: text,
+        headers,
       }),
     };
   }

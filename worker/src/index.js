@@ -419,7 +419,7 @@ async function handleSubscribe(request, env, ctx, url) {
       const siteUrl = url.origin;
       const unsubUrl = `${siteUrl}/api/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
       const mail = welcomeEmail(email, preferences, siteUrl, unsubUrl);
-      const sent = await sendMail(env, { to: email, ...mail });
+      const sent = await sendMail(env, { to: email, ...mail, unsubscribeUrl: unsubUrl });
       confirmationSent = sent.sent;
       const masked = email.replace(/^(.{2}).*(@.*)$/, '$1***$2');
       if (sent.sent) console.log(`[subscribe] welcome email sent via ${sent.provider} -> ${masked}`);
