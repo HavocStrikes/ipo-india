@@ -259,9 +259,12 @@ setTimeout(() => {
     if (!strip.innerHTML.includes('-813.35') || !strip.innerHTML.includes('+25')) {
       missing.push('market strip absolute change missing');
     }
-    if (!strip.innerHTML.includes('(-1.08%)') || !strip.innerHTML.includes('(+0.56%)')) {
-      missing.push('market strip percent-in-parens missing');
+    // Arrow-only pills: percent without parens; the absolute day change lives
+    // in the tile tooltip (title attr), not the markup.
+    if (!strip.innerHTML.includes('-1.08%') || !strip.innerHTML.includes('+0.56%')) {
+      missing.push('market strip percent missing');
     }
+    if (strip.innerHTML.includes('mt-abs')) missing.push('mt-abs must not render (arrow-only pills)');
     if (/\bNaN\b|\bundefined\b/.test(strip.innerHTML)) missing.push('market strip has NaN/undefined leak');
   }
 

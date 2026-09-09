@@ -258,22 +258,22 @@
       q.currency === 'INR' && Math.abs(q.price) >= 1000
         ? q.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })
         : q.price.toLocaleString('en-IN', { maximumFractionDigits: 2 });
-    // Yahoo-style two-row tile: muted name on top; below, the price next to a
-    // tinted change pill in Yahoo's quote-header format — solid triangle +
-    // absolute change + (percent), e.g. "▼ -813.35 (-1.08%)" in green/red.
+    // Yahoo-strip-style two-row tile: muted name on top; below, the price next
+    // to a large tinted arrow+percent pill (▲ 0.56%) in green/red — Yahoo's
+    // strip shows exactly arrow+% . The absolute day change moves into the
+    // hover tooltip so the bigger type stays clean.
     const absTxt =
       typeof q.change === 'number'
         ? `${q.change > 0 ? '+' : ''}${q.change.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
         : '';
     const pctTxt = pct(q.changePct, true);
-    const pctPart = pctTxt === '—' ? '' : `(${pctTxt})`;
-    const title =
-      q.prevClose != null
-        ? `${q.name} — prev close ${sym}${q.prevClose.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-        : q.name;
+    const pctPart = pctTxt === '—' ? '' : pctTxt;
+    const prevTxt = q.prevClose != null ? sym + q.prevClose.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '';
+    const extra = [absTxt && `today ${absTxt}`, prevTxt && `prev close ${prevTxt}`].filter(Boolean).join(' · ');
+    const title = extra ? `${q.name} — ${extra}` : q.name;
     return `<div class="mtile ${dir}" title="${esc(title)}">
         <span class="mt-name">${esc(q.name)}</span>
-        <span class="mt-row"><span class="mt-price">${sym}${priceTxt}</span><span class="mt-chg"><span class="mt-arr" aria-hidden="true">${arrow}</span>${absTxt ? `<span class="mt-abs">${absTxt}</span>` : ''}${pctPart ? `<span class="mt-pct">${pctPart}</span>` : ''}</span></span>
+        <span class="mt-row"><span class="mt-price">${sym}${priceTxt}</span>${pctPart ? `<span class="mt-chg"><span class="mt-arr" aria-hidden="true">${arrow}</span><span class="mt-pct">${pctPart}</span></span>` : ''}</span>
       </div>`;
   }
 
