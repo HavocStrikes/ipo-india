@@ -7,6 +7,7 @@
  *   GET  /api/ipos              -> live IPO list (merged + scored, filters)
  *   GET  /api/ipos/:id          -> one IPO with deep detail (scraped, cached)
  *   GET  /api/meta              -> data freshness info
+ *   GET  /api/markets           -> market strip (Sensex/Nifty/USD-INR/gold/...)
  *   GET  /api/notable           -> famous/notable IPOs (deep-history search)
  *   POST /api/subscribe         -> { email, preferences } (welcome email)
  *   GET  /api/subscribers/count -> subscriber count
@@ -33,6 +34,7 @@ import { computeScore } from '../../lib/scoring.js';
 import { loadDetail, mergeDetailIntoIpo } from '../../lib/detail.js';
 import { upstreamState } from '../../lib/fetcher.js';
 import { attachLiveSubscriptions } from '../../lib/livesubs.js';
+import { fetchMarketSnapshot } from '../../lib/markets.js';
 
 import {
   addSubscriber,
@@ -372,6 +374,29 @@ async function refreshData(env) {
   } catch (err) {
     console.error('[verify] BSE refresh failed:', err && (err.message || err));
   }
+
+  // 6. market strip (Sensex, Nifty, Bank Nifty, VIX, USD/INR, gold, crude,
+  // S&P 500) — light slots only, like live subs: 8 sequential Yahoo Finance
+  // chart requests + 16 (year) + ≤16 (live subs) + ≤3 (BSE verify) stays
+  // inside the free-tier 50-subrequest cap. Failures never break the IPO
+  // pipeline; the last-good KV snapshot keeps the strip alive, and markets.js
+  // has its own fetcher so a Yahoo 429 can never trip the Chittorgarh breaker.
+  if (!heavySlot) {
+    try {
+      const snap = await fetchMarketSnapshot();
+      if (snap.quotes.length) {
+        await putJson(env, 'markets:snapshot', snap); // no TTL — last-good survives outages
+        console.log(
+          `[markets] ${snap.quotes.length}/${snap.quotes.length + snap.errors.length} quotes` +
+            (snap.errors.length ? ` — ${snap.errors.join('; ')}` : '')
+        );
+      } else {
+        console.error('[markets] no quotes fetched — keeping last-good KV:', snap.errors.join('; '));
+      }
+    } catch (err) {
+      console.error('[markets] refresh failed:', err && err.message);
+    }
+  }
 }
 
 // ---- request side -----------------------------------------------------------
@@ -627,6 +652,13 @@ async function handleApi(request, env, ctx, url) {
     const nd = await getJson(env, 'notable');
     if (!nd) return WARMING();
     return json({ fetchedAt: nd.fetchedAt, count: nd.count, ipos: nd.ipos });
+  }
+
+  // Market strip quotes — served straight from KV (refreshed by cron); the
+  // strip renders even while the IPO dataset itself is still warming up.
+  if (p === '/api/markets') {
+    const snap = await getJson(env, 'markets:snapshot');
+    return json({ fetchedAt: snap ? snap.fetchedAt : null, quotes: snap ? snap.quotes : [] });
   }
 
   if (p === '/api/subscribe') return handleSubscribe(request, env, ctx, url);

@@ -152,6 +152,13 @@ Today's date drives all windows, so the site always feels current.
   attached as `liveSub` to open issues only; the worker refreshes it on "light"
   cron slots (~3×/hour) to stay inside its subrequest budget, and SME issues
   legitimately report `qib: null`.
+- **Market strip quotes** — Yahoo Finance's public chart endpoint
+  (`v8/finance/chart/<symbol>`, `lib/markets.js`) powers the top-of-page strip:
+  Sensex, Nifty 50, Bank Nifty, India VIX, USD/INR, COMEX gold, WTI crude and the
+  S&P 500. Keyless and friendly to the honest project UA (browser UAs get 429'd);
+  fetched sequentially every light cron slot (~3×/hour) and cached as last-good
+  (`markets:snapshot` KV / 5-min SWR in server.js). The module has its own fetcher
+  on purpose: a Yahoo 429 must never trip the Chittorgarh circuit breaker.
 - **BSE India public JSON feeds** (`api.bseindia.com`) — an *independent second source*
   used to cross-check the numbers we publish (`lib/verify.js`):
   - `GetPublicIssue_par_updated` → open + forthcoming issues (BSE scrip code, dates,
@@ -312,6 +319,7 @@ Ops visibility: `GET /api/alerts/status` (no PII — counts only).
 | `GET /api/ipos`      | List (windowed by default). Query: `status`, `category`, `q`, `all=1`. Each row carries `verification` when BSE has a counterpart, and `liveSub` (`{ qib, nii, retail, total, fetchedAt }`) while bidding is open |
 | `GET /api/ipos/:id`  | One IPO: full record + score pillars + scraped detail + BSE cross-check (`verification.mismatches` lists any disagreements); open issues include `liveSub` |
 | `GET /api/meta`      | Freshness, per-status counts, upstream errors, BSE verify state |
+| `GET /api/markets`   | Market strip quotes (`{ fetchedAt, quotes[] }`) — Sensex, Nifty 50, Bank Nifty, India VIX, USD/INR, gold, crude, S&P 500 with prev close / change % |
 | `GET /healthz`       | Liveness probe                                          |
 | `POST /api/subscribe` | Subscribe for updates — JSON `{ email, preferences }`  |
 | `GET /api/subscribers/count` | How many people subscribed (no emails exposed)  |

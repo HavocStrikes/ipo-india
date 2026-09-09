@@ -64,6 +64,9 @@
     </div>
   </header>
 
+  <!-- Market strip: Sensex / Nifty / USD-INR / gold / crude / S&P (filled by app.js) -->
+  <div class="market-strip" id="marketStrip" hidden aria-label="Market snapshot"></div>
+
   <main id="app" class="wrap" aria-live="polite">
     <div class="page-loading"><div class="spinner"></div></div>
   </main>
@@ -73,6 +76,7 @@
       <p>
         IPO data courtesy <a href="https://www.chittorgarh.com/" rel="noopener">Chittorgarh</a> public feeds ·
         cross-checked against <a href="https://www.bseindia.com/" rel="noopener">BSE India</a> public data ·
+        market strip via <a href="https://finance.yahoo.com/" rel="noopener">Yahoo Finance</a> ·
         auto-refreshed every 10 min ·
         Score = Demand 25 + Fundamentals 25 + Valuation 20 + Performance 15 + Sentiment 15.
       </p>

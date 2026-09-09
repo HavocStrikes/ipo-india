@@ -235,6 +235,69 @@
     if (showAll && m.total) showAll.textContent = `View full archive (${m.total} IPOs)`;
   }
 
+  /* ---------------- market strip ---------------- */
+  // Top-of-page market snapshot (Sensex, Nifty, Bank Nifty, India VIX,
+  // USD/INR, gold, crude, S&P 500) — served by the backend from
+  // /api/markets, which caches upstream quotes (Yahoo Finance) so the
+  // browser never calls the upstream directly.
+  const CURRENCY_SYMBOL = { INR: '₹', USD: '$' };
+
+  /** True during NSE/BSE regular hours (09:15–15:30 IST, Mon–Fri). */
+  function marketOpenIST(now = new Date()) {
+    const ist = new Date(now.getTime() + 330 * 60000); // IST = UTC+5:30
+    const day = ist.getUTCDay();
+    const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    return day >= 1 && day <= 5 && mins >= 555 && mins < 930;
+  }
+
+  function marketTile(q) {
+    const sym = CURRENCY_SYMBOL[q.currency] || '';
+    const dir = q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
+    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·';
+    const priceTxt =
+      q.currency === 'INR' && Math.abs(q.price) >= 1000
+        ? q.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+        : q.price.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    const title =
+      q.prevClose != null
+        ? `${q.name} — prev close ${sym}${q.prevClose.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+        : q.name;
+    return `<div class="mtile ${dir}" title="${esc(title)}">
+        <span class="mt-name">${esc(q.name)}</span>
+        <span class="mt-price">${sym}${priceTxt}</span>
+        <span class="mt-chg">${arrow} ${pct(q.changePct, true)}</span>
+      </div>`;
+  }
+
+  function renderMarkets(snap) {
+    const el = $('#marketStrip');
+    if (!el) return;
+    const quotes = ((snap && Array.isArray(snap.quotes)) || []).filter((q) => q && typeof q.price === 'number');
+    if (!quotes.length) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    const asOf = snap.fetchedAt
+      ? new Date(snap.fetchedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const live = marketOpenIST();
+    el.innerHTML =
+      `<div class="wrap mt-inner">` +
+      `<span class="mt-tag${live ? ' live' : ''}"><span class="mt-dot"></span>${live ? 'Market open' : 'Market closed'}</span>` +
+      quotes.map(marketTile).join('') +
+      (asOf ? `<span class="mt-asof">as of ${asOf} IST</span>` : '') +
+      `</div>`;
+  }
+
+  function loadMarkets() {
+    api('/api/markets')
+      .then(renderMarkets)
+      .catch(() => {
+        /* the strip is a nice-to-have — a failure keeps the last render */
+      });
+  }
+
   /* ---------------- list view ---------------- */
   function renderList({ keep = false } = {}) {
     document.title = 'IPO India — Live Upcoming & Listed IPOs with Scores';
@@ -1378,6 +1441,8 @@
   initPwa();
   route();
   loadMeta();
-  // auto-refresh data freshness every 5 min
+  loadMarkets();
+  // auto-refresh data freshness + market strip every 5 min
   setInterval(loadMeta, 5 * 60 * 1000);
+  setInterval(loadMarkets, 5 * 60 * 1000);
 })();

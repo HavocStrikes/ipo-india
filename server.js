@@ -6,6 +6,7 @@
  *   /api/ipos              -> live IPO list (merged + scored)
  *   /api/ipos/:id          -> one IPO with deep detail (scraped, cached)
  *   /api/meta              -> data freshness info
+ *   /api/markets           -> market strip (Sensex/Nifty/USD-INR/gold/...)
  *   /api/subscribe         -> POST { email, preferences } to subscribe
  *   /api/subscribers/count -> subscriber count (no emails exposed)
  *   /api/unsubscribe       -> GET one-click unsubscribe (signed link from emails)
@@ -23,6 +24,7 @@ const { loadDetail, mergeDetailIntoIpo } = require('./lib/detail');
 const { upstreamState } = require('./lib/fetcher');
 const { attachLiveSubscriptions } = require('./lib/livesubs');
 const { fetchBseData, verifyIpo, verifyState } = require('./lib/verify');
+const { fetchMarketSnapshot } = require('./lib/markets');
 
 const {
   addSubscriber,
@@ -55,6 +57,7 @@ const NOTABLE_NAMES = [
 const NOTABLE_TTL = 60 * 60 * 1000; // refresh notable list every hour
 const NOTABLE_HISTORY_YEARS = 6; // go back to 2020 for notable IPOs
 const VERIFY_TTL = 60 * 60 * 1000; // refresh BSE cross-verification every hour
+const MARKETS_TTL = 5 * 60 * 1000; // refresh market strip quotes every 5 min
 
 
 /** True if the IPO's key date falls inside the curated window for its status. */
@@ -227,6 +230,18 @@ async function getNotableDataset() {
 function getVerifyDoc() {
   return cache.swr('verify:bse', VERIFY_TTL, () => fetchBseData({})).catch((err) => {
     console.error('[verify] BSE refresh failed:', err && err.message);
+    return null;
+  });
+}
+
+/**
+ * Market strip quotes (lib/markets.js) — SWR-cached like the datasets, so a
+ * failed refresh keeps serving the last good snapshot (the strip shows an
+ * older "as of" time instead of disappearing).
+ */
+function getMarkets() {
+  return cache.swr('markets', MARKETS_TTL, () => fetchMarketSnapshot()).catch((err) => {
+    console.error('[markets] refresh failed:', err && err.message);
     return null;
   });
 }
@@ -476,6 +491,12 @@ const server = http.createServer(async (req, res) => {
           breaker: verifyState(),
         },
       });
+      return;
+    }
+
+    if (p === '/api/markets') {
+      const snap = await getMarkets();
+      json(res, 200, snap || { fetchedAt: null, quotes: [] });
       return;
     }
 
