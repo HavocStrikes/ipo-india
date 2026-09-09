@@ -21,6 +21,8 @@ const { loadDashboardSchedule, toIpoRecord } = require('./lib/dashboard');
 const { computeScore } = require('./lib/scoring');
 const { loadDetail, mergeDetailIntoIpo } = require('./lib/detail');
 const { upstreamState } = require('./lib/fetcher');
+const { fetchBseData, verifyIpo, verifyState } = require('./lib/verify');
+
 const {
   addSubscriber,
   removeSubscriber,
@@ -51,6 +53,8 @@ const NOTABLE_NAMES = [
 ];
 const NOTABLE_TTL = 60 * 60 * 1000; // refresh notable list every hour
 const NOTABLE_HISTORY_YEARS = 6; // go back to 2020 for notable IPOs
+const VERIFY_TTL = 60 * 60 * 1000; // refresh BSE cross-verification every hour
+
 
 /** True if the IPO's key date falls inside the curated window for its status. */
 function inWindow(ipo, status, now = new Date()) {
@@ -206,6 +210,19 @@ async function buildNotableDataset() {
 async function getNotableDataset() {
   return cache.swr('notable', NOTABLE_TTL, buildNotableDataset);
 }
+
+/**
+ * BSE cross-verification doc (lib/verify.js) — SWR-cached like the datasets,
+ * so a failed refresh keeps serving the last good doc (verification simply
+ * shows an older "checked" time instead of erroring).
+ */
+function getVerifyDoc() {
+  return cache.swr('verify:bse', VERIFY_TTL, () => fetchBseData({})).catch((err) => {
+    console.error('[verify] BSE refresh failed:', err && err.message);
+    return null;
+  });
+}
+
 
 // __FAMOUS1__
 const FAMOUS_IPOS_PART1 = [
@@ -384,6 +401,13 @@ const server = http.createServer(async (req, res) => {
         rows = rows.filter((i) => (i.category || '').toLowerCase() === category.toLowerCase());
       }
       if (q) rows = rows.filter((i) => i.name.toLowerCase().includes(q));
+      // Independent BSE cross-check, attached per row (compact: no field values).
+      const vdoc = await getVerifyDoc();
+      const ipos = rows.map((i) => {
+        const s = summarize(i);
+        const v = verifyIpo(s, vdoc, { compact: true });
+        return v ? { ...s, verification: v } : s;
+      });
       json(res, 200, {
         fetchedAt: ds.fetchedAt,
         yearsLoaded: ds.yearsLoaded,
@@ -392,7 +416,7 @@ const server = http.createServer(async (req, res) => {
         total: ds.count,
         returned: rows.length,
         errors: ds.errors,
-        ipos: rows.map(summarize),
+        ipos,
       });
       return;
     }
@@ -413,7 +437,9 @@ const server = http.createServer(async (req, res) => {
         .swr(`detail:${id}`, DETAIL_TTL, () => loadDetail(ipo))
         .catch(() => ({ error: 'Detail temporarily unavailable — upstream feed is down.' }));
       const merged = mergeDetailIntoIpo(ipo, detail, deriveStatus);
-      json(res, 200, { fetchedAt: ds.fetchedAt, ipo: merged, detail });
+      const vdoc = await getVerifyDoc();
+      const v = verifyIpo(merged, vdoc);
+      json(res, 200, { fetchedAt: ds.fetchedAt, ipo: v ? { ...merged, verification: v } : merged, detail });
       return;
     }
 
@@ -423,6 +449,7 @@ const server = http.createServer(async (req, res) => {
       ds.ipos.forEach((i) => {
         if (counts[i.status] !== undefined && inWindow(i, i.status)) counts[i.status]++;
       });
+      const vdoc = await getVerifyDoc();
       json(res, 200, {
         fetchedAt: ds.fetchedAt,
         refreshMinutes: REFRESH_MINUTES,
@@ -433,6 +460,12 @@ const server = http.createServer(async (req, res) => {
         errors: ds.errors,
         cache: cache.stats(),
         upstream: upstreamState(),
+        verify: {
+          source: 'BSE',
+          fetchedAt: vdoc ? vdoc.fetchedAt : null,
+          counts: vdoc ? { issues: vdoc.issues.length, listed: vdoc.listed.length } : null,
+          breaker: verifyState(),
+        },
       });
       return;
     }

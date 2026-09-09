@@ -280,6 +280,26 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .badge.sme { background: rgba(217, 70, 239, 0.12); color: #d946ef; border-color: rgba(217, 70, 239, 0.3); }
 .badge.muted { opacity: 0.65; }
 
+/* ---------- BSE cross-verification chip + note ---------- */
+.verify-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap; cursor: help;
+}
+.verify-chip.ok { background: rgba(52, 211, 153, 0.1); color: var(--good); border: 1px solid rgba(52, 211, 153, 0.3); }
+.verify-chip.warn { background: rgba(251, 146, 60, 0.12); color: var(--weak); border: 1px solid rgba(251, 146, 60, 0.35); }
+.verify-note {
+  margin: 0 0 22px; padding: 11px 16px; border-radius: 14px; font-size: 13px; line-height: 1.55;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.verify-note.ok { border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.07); }
+.verify-note.warn { border-color: rgba(251, 146, 60, 0.4); background: rgba(251, 146, 60, 0.07); }
+.verify-note ul { margin: 7px 0 7px 18px; padding: 0; }
+.verify-note li { margin: 3px 0; }
+.verify-note b { font-weight: 700; }
+.verify-note .v-when { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
+
+
 /* ---------- score ring ---------- */
 .score-ring { position: relative; display: grid; place-items: center; flex: none; }
 .score-ring svg { transform: rotate(-90deg); display: block; }

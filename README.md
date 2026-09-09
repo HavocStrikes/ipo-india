@@ -145,6 +145,23 @@ Today's date drives all windows, so the site always feels current.
 - **Per-IPO detail pages** are scraped server-side (cached 30 min) for price band,
   lot size, issue structure, objects of the issue, promoters, registrar, lead managers
   and listing-day trading stats.
+- **BSE India public JSON feeds** (`api.bseindia.com`) — an *independent second source*
+  used to cross-check the numbers we publish (`lib/verify.js`):
+  - `GetPublicIssue_par_updated` → open + forthcoming issues (BSE scrip code, dates,
+    price band, face value),
+  - `MoreCompanyN` (mainboard + SME, per calendar year) → listed issues (issue price,
+    listing date, listing-day close).
+  Records are matched by BSE scrip code when known, else by normalized company name.
+  Verified records get a **✓ BSE** chip on cards; disagreements show **⚠ BSE** and are
+  listed on the detail page — never hidden. NSE-only listings show nothing (BSE can't
+  see them, so we claim nothing). NSE itself is not scrapeable: its APIs sit behind
+  Akamai TLS-fingerprint bot detection (403 for every non-browser client, including
+  Cloudflare Workers).
+  > **Disclosure:** BSE's WAF rejects every non-browser User-Agent string (the honest
+  > project UA and the `Mozilla/5.0 (compatible; bot; +url)` convention both get 403).
+  > For these three read-only public endpoints only, we send a minimal browser UA,
+  > at tiny volume (~3 requests every 1-2 h, own circuit breaker, last-good caching).
+  > Chittorgarh — the primary source — gets the fully honest UA it happily accepts.
 
 Upstream data refreshes every 10 minutes (stale-while-revalidate, so responses stay
 instant) and the frontend re-pulls every 5 minutes. A green "live" pill shows freshness.
@@ -285,9 +302,9 @@ Ops visibility: `GET /api/alerts/status` (no PII — counts only).
 
 | Endpoint             | Description                                             |
 | -------------------- | ------------------------------------------------------- |
-| `GET /api/ipos`      | List (windowed by default). Query: `status`, `category`, `q`, `all=1` |
-| `GET /api/ipos/:id`  | One IPO: full record + score pillars + scraped detail   |
-| `GET /api/meta`      | Freshness, per-status counts, upstream errors           |
+| `GET /api/ipos`      | List (windowed by default). Query: `status`, `category`, `q`, `all=1`. Each row carries `verification` when BSE has a counterpart |
+| `GET /api/ipos/:id`  | One IPO: full record + score pillars + scraped detail + BSE cross-check (`verification.mismatches` lists any disagreements) |
+| `GET /api/meta`      | Freshness, per-status counts, upstream errors, BSE verify state |
 | `GET /healthz`       | Liveness probe                                          |
 | `POST /api/subscribe` | Subscribe for updates — JSON `{ email, preferences }`  |
 | `GET /api/subscribers/count` | How many people subscribed (no emails exposed)  |

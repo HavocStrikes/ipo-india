@@ -54,6 +54,22 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
 
+  /** "checked 34 min ago" style relative time for a past timestamp. */
+  const agoS = (v) => {
+    if (v == null) return '';
+    // Full ISO datetimes (verification "checkedAt") go straight to Date();
+    // toDate() only understands date-only or human-formatted strings.
+    const d = /^\d{4}-\d{2}-\d{2}T/.test(String(v)) ? new Date(String(v)) : toDate(v);
+    if (!d || isNaN(d.getTime())) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const h = Math.round(mins / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.round(h / 24)}d ago`;
+  };
+
+
   const TONES = { great: 'var(--great)', good: 'var(--good)', neutral: 'var(--neutral)', weak: 'var(--weak)', bad: 'var(--bad)' };
   const toneColor = (t) => TONES[t || 'neutral'] || TONES.neutral;
   const STATUS_META = {
@@ -369,7 +385,54 @@
       });
   }
 
+  /* ---------------- BSE cross-verification UI ---------------- */
+
+  const VERIFY_FIELDS = {
+    openDate: 'Open date',
+    closeDate: 'Close date',
+    priceBandLow: 'Price band (low)',
+    priceBandHigh: 'Price band (high)',
+    faceValue: 'Face value',
+    issuePrice: 'Issue price',
+    listingDate: 'Listing date',
+    listingGainPct: 'Listing gain',
+  };
+  const fmtVerifyVal = (field, v) => {
+    if (v == null) return '—';
+    if (/Date$/.test(field)) return dateS(v);
+    if (field === 'listingGainPct') return pct(v, true);
+    return inr(v);
+  };
+
+  /** Small ✓/⚠ chip for list cards. Absent when BSE has no counterpart. */
+  function verifyChip(v) {
+    if (!v || v.verified == null) return '';
+    return v.verified
+      ? `<span class="verify-chip ok" title="Dates &amp; prices cross-checked against BSE&#39;s official issue data">✓ BSE</span>`
+      : `<span class="verify-chip warn" title="Some fields differ from BSE&#39;s official issue data — see the detail page">⚠ BSE</span>`;
+  }
+
+  /** Detail-page note: what we checked against BSE and what (if anything) differs. */
+  function bseNote(i) {
+    const v = i.verification;
+    if (!v || v.verified == null) return '';
+    const when = v.checkedAt ? ` <span class="v-when">checked ${esc(agoS(v.checkedAt))} · api.bseindia.com</span>` : '';
+    if (v.verified) {
+      return `<p class="verify-note ok">✓ Cross-checked with BSE — the dates &amp; prices on this page match BSE&rsquo;s official issue data.${when}</p>`;
+    }
+    const rows = (v.mismatches || [])
+      .map(
+        (m) =>
+          `<li>${esc(VERIFY_FIELDS[m.field] || m.field)} — ours <b>${esc(fmtVerifyVal(m.field, m.ours))}</b> · BSE <b>${esc(
+            fmtVerifyVal(m.field, m.bse)
+          )}</b></li>`
+      )
+      .join('');
+    return `<p class="verify-note warn">⚠ Differs from BSE&rsquo;s official issue data${when}:<ul>${rows}</ul>Chittorgarh is our primary source; the RHP is always authoritative.</p>`;
+  }
+
   function cardHtml(i, idx = 0) {
+
     const sm = STATUS_META[i.status] || STATUS_META.listed;
     const sc = (i.score && i.score.score) != null ? i.score.score : null;
     const tone = i.score ? i.score.tone : 'neutral';
@@ -395,6 +458,7 @@
             <div class="badges">
               <span class="badge ${sm.cls}">● ${sm.label}</span>
               <span class="badge ${i.category === 'SME' ? 'sme' : ''}">${esc(i.category || '—')}</span>
+              ${verifyChip(i.verification)}
             </div>
           </div>
           ${scoreRing(sc ?? 0, tone, 52)}
@@ -667,28 +731,6 @@
       .join('')}</div>`;
   }
 
-  /** Price-band range bar with an issue-price marker — renders for every IPO
-   *  that has a band, including upcoming ones with no other numbers yet. */
-  function priceBandSVG(low, high, issue) {
-    const W = 470, H = 120, padX = 18, barY = 48, barH = 24;
-    const w = W - padX * 2;
-    const uid = `pb${++_chartUid}`;
-    let marker = '';
-    if (issue != null && issue >= low && issue <= high) {
-      const fx = padX + ((issue - low) / (high - low || 1)) * w;
-      const tx = Math.min(W - padX - 34, Math.max(padX + 34, fx));
-      marker = `<line x1="${fx.toFixed(1)}" y1="${barY - 9}" x2="${fx.toFixed(1)}" y2="${barY + barH + 9}" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
-        <text x="${tx.toFixed(1)}" y="${barY - 15}" class="val-txt" text-anchor="middle">issue ${inr(issue)}</text>`;
-    }
-    return `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Price band chart: ${inr(low)} to ${inr(high)} per share">
-      <defs><linearGradient id="${uid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--brand)"/><stop offset="1" stop-color="var(--brand-2)"/></linearGradient></defs>
-      <rect x="${padX}" y="${barY}" width="${w}" height="${barH}" rx="${barH / 2}" fill="url(#${uid})" opacity="0.92"/>
-      ${marker}
-      <text x="${padX}" y="${barY + barH + 26}" class="cat-txt">low ${inr(low)}</text>
-      <text x="${W - padX}" y="${barY + barH + 26}" class="cat-txt" text-anchor="end">high ${inr(high)}</text>
-    </svg>`;
-  }
-
   /** Builds the chart cards AND reports which of them rendered, so
    *  renderDetailBody can drop text panels that would duplicate the charts. */
   function chartsHTML(i) {
@@ -696,16 +738,7 @@
     const f = i.financials || {};
     const k = i.kpi || {};
     const cards = [];
-    const flags = { finBars: false, meters: false, donut: false, funds: false, priceBand: false, promoters: false };
-
-    // Price band first — every IPO has pricing, and for upcoming IPOs this is
-    // often the only chartable number. Drops the duplicated issue-details rows.
-    const bandLow = d.priceBandLow, bandHigh = d.priceBandHigh;
-    const issuePx = i.issuePrice != null ? i.issuePrice : d.issuePrice != null ? d.issuePrice : null;
-    if (bandLow != null && bandHigh != null && bandHigh >= bandLow) {
-      flags.priceBand = true;
-      cards.push(chartCard('Price band', issuePx != null ? `bid within ₹${numFmt(bandLow, 0)}–₹${numFmt(bandHigh, 0)}` : 'issue pricing', priceBandSVG(bandLow, bandHigh, issuePx)));
-    }
+    const flags = { finBars: false, meters: false, donut: false, funds: false, promoters: false };
 
     // 1 — Financials at a glance (vertical bars, ₹ Cr)
     const finItems = [
@@ -972,15 +1005,9 @@
 
     // Two-tier issue details: the five numbers people scan first stay visible;
     // reference metadata (codes, sale type…) folds into a collapsed block.
-    // Price band / issue price rows are dropped when the price-band chart
-    // already shows band low–high and the issue-price marker.
     const essentialRows = [
-      ...(charts.flags.priceBand
-        ? []
-        : [
-            ['Price band', i.issuePrice != null && d.priceBandLow != null ? `${inr(d.priceBandLow)} – ${inr(d.priceBandHigh)}` : i.issuePrice != null ? inr(i.issuePrice) : '—'],
-            ['Issue price', i.issuePrice != null ? `${inr(i.issuePrice)} per share` : '—'],
-          ]),
+      ['Price band', i.issuePrice != null && d.priceBandLow != null ? `${inr(d.priceBandLow)} – ${inr(d.priceBandHigh)}` : i.issuePrice != null ? inr(i.issuePrice) : '—'],
+      ['Issue price', i.issuePrice != null ? `${inr(i.issuePrice)} per share` : '—'],
       ['Lot size', d.lotSize != null ? `${numFmt(d.lotSize)} shares` : '—'],
       ['Total issue size', i.issueAmountCr != null ? `${cr(i.issueAmountCr)}${d.totalIssueShares ? ` · ${numFmt(d.totalIssueShares)} shares` : ''}` : '—'],
       ['Listing at', i.exchange || d.listingAt || '—'],
@@ -1083,6 +1110,8 @@
           </div>
         </div>
       </section>
+
+      ${bseNote(i)}
 
       ${charts.html}
 

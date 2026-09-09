@@ -57,7 +57,9 @@ const listIpo = {
   pePost: 18.2, ronw: 22.5,
   score: { score: 61.4, verdict: 'Subscribe', tone: 'good', confidence: 'high' },
   detailUrl: 'https://example.com', nseSymbol: null, known: 4,
+  verification: { source: 'BSE', verified: true, mismatches: 0, checkedAt: FRESH_ISO },
 };
+
 
 const detailResp = {
   fetchedAt: FRESH_ISO,
@@ -139,6 +141,7 @@ const check = (name, cond) => {
   console.log('\n- list view -');
   check('card rendered', listHtml.includes('Farm Peace Ltd.'));
   check('card hides "—" Subscription row when no sub data', !/>Subscription<\/span>/.test(listHtml));
+  check('BSE-verified chip on card', listHtml.includes('verify-chip ok') && listHtml.includes('✓ BSE'));
   check('hero still renders', heroHtml.includes('India&rsquo;s IPOs'));
 
   console.log('\n- detail view -');
@@ -170,6 +173,12 @@ const check = (name, cond) => {
   // Scope to the first score-ring svg; '<line ' (with space) can't match <linearGradient.
   const ringSvg = (html.split('<div class="score-ring')[1] || '').split('</svg>')[0] || '';
   check('score ring simplified (no tick marks)', ringSvg !== '' && !ringSvg.includes('<line '));
+
+  console.log('\n- price band + BSE cross-check -');
+  check('price-band chart card removed', !html.includes('aria-label="Price band chart:'));
+  check('price band still shown as issue-details row', html.includes('₹125 – ₹132'));
+  check('issue price row shows per-share value', html.includes('₹132 per share'));
+  check('BSE cross-check note rendered', html.includes('Cross-checked with BSE') && html.includes('api.bseindia.com'));
 
   console.log('\n- stale banner -');
   const sn = els.get('#staleNote');

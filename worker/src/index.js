@@ -31,6 +31,8 @@ import { loadYear, deriveStatus } from '../../lib/normalize.js';
 import { loadDashboardSchedule, toIpoRecord } from '../../lib/dashboard.js';
 import { computeScore } from '../../lib/scoring.js';
 import { loadDetail, mergeDetailIntoIpo } from '../../lib/detail.js';
+import { upstreamState } from '../../lib/fetcher.js';
+
 import {
   addSubscriber,
   removeSubscriber,
@@ -41,6 +43,8 @@ import {
 import { sendMail, welcomeEmail, isMailConfigured, providerName } from './mail.js';
 import { isNotableName } from './notable.js';
 import { runMainboardAlerts, mainboardAlertStatus } from './mainboard-alerts.js';
+import { fetchBseData, verifyIpo, verifyState } from '../../lib/verify.js';
+
 
 const DETAIL_TTL_SECONDS = 30 * 60; // scraped detail + merged record cache
 
@@ -331,6 +335,24 @@ async function refreshData(env) {
     count: ranked.length,
     ipos: ranked,
   });
+  // 5. BSE cross-verification (independent second source). Refresh on odd
+  // slots (slot 1, 3, 5) every 2nd hour — slot 0/2/4 carry the heavy
+  // prev-year + deep-history rebuilds, so this keeps the free-tier
+  // 50-subrequest budget safe (16 + 3 = 19 worst case on an odd slot).
+  // The ~3h worst-case age is fine: verification is a slow-moving check.
+  // Failures never break the primary pipeline — last-good KV keeps serving.
+  try {
+    const vdoc = await getJson(env, 'verify:bse');
+    const vAgeMs = vdoc && vdoc.fetchedAt ? Date.now() - Date.parse(vdoc.fetchedAt) : Infinity;
+    const slotIsOdd = slot % 2 === 1;
+    if (!vdoc || (vAgeMs > 100 * 60 * 1000 && slotIsOdd && now.getUTCHours() % 2 === 0)) {
+      const fresh = await fetchBseData({ year: y });
+      await putJson(env, 'verify:bse', fresh);
+      console.log(`[verify] BSE refresh: ${fresh.issues.length} open/upcoming + ${fresh.listed.length} listed rows`);
+    }
+  } catch (err) {
+    console.error('[verify] BSE refresh failed:', err && (err.message || err));
+  }
 }
 
 // ---- request side -----------------------------------------------------------
@@ -474,6 +496,13 @@ async function handleApi(request, env, ctx, url) {
       rows = rows.filter((i) => (i.category || '').toLowerCase() === category.toLowerCase());
     }
     if (q) rows = rows.filter((i) => i.name.toLowerCase().includes(q));
+    // Independent BSE cross-check, attached per row (compact: no field values).
+    const vdoc = await getJson(env, 'verify:bse');
+    const ipos = rows.map((i) => {
+      const s = summarize(i);
+      const v = verifyIpo(s, vdoc, { compact: true });
+      return v ? { ...s, verification: v } : s;
+    });
     return json({
       fetchedAt: ds.fetchedAt,
       yearsLoaded: ds.yearsLoaded,
@@ -482,18 +511,24 @@ async function handleApi(request, env, ctx, url) {
       total: ds.total,
       returned: rows.length,
       errors: ds.errors,
-      ipos: rows,
+      ipos,
     });
   }
 
   const detailMatch = p.match(/^\/api\/ipos\/(\d+)$/);
   if (detailMatch) {
     const id = Number(detailMatch[1]);
+    // Independent BSE cross-check, evaluated against the merged record.
+    const vdoc = await getJson(env, 'verify:bse');
+    const withVerify = (ipo) => {
+      const v = verifyIpo(ipo, vdoc);
+      return v ? { ...ipo, verification: v } : ipo;
+    };
     // fast path: merged record cached from a recent view
     const cachedIpo = await getJson(env, `ipo:${id}`);
     const cachedDetail = await getJson(env, `detail:${id}`);
     if (cachedIpo && cachedDetail && !cachedDetail.error) {
-      return json({ fetchedAt: cachedIpo.fetchedAt, ipo: cachedIpo.ipo, detail: cachedDetail });
+      return json({ fetchedAt: cachedIpo.fetchedAt, ipo: withVerify(cachedIpo.ipo), detail: cachedDetail });
     }
 
     const cur = await getJson(env, `list:${y}`);
@@ -529,16 +564,16 @@ async function handleApi(request, env, ctx, url) {
         putJson(env, `detail:${id}`, detail, DETAIL_TTL_SECONDS),
         putJson(env, `lastgood:detail:${id}`, detail), // no TTL — survives bans
       ]);
-      return json({ fetchedAt, ipo: merged, detail });
+      return json({ fetchedAt, ipo: withVerify(merged), detail });
     }
     const lastGood = await getJson(env, `lastgood:detail:${id}`);
     if (lastGood) {
       const merged = mergeDetailIntoIpo(ipo, lastGood, deriveStatus);
-      return json({ fetchedAt, ipo: merged, detail: lastGood, stale: true });
+      return json({ fetchedAt, ipo: withVerify(merged), detail: lastGood, stale: true });
     }
     const errDetail = { error: 'Detail temporarily unavailable — upstream feed is down. Please retry shortly.' };
     const mergedErr = mergeDetailIntoIpo(ipo, errDetail, deriveStatus);
-    return json({ fetchedAt, ipo: mergedErr, detail: errDetail, stale: true });
+    return json({ fetchedAt, ipo: withVerify(mergedErr), detail: errDetail, stale: true });
   }
 
   if (p === '/api/meta') {
@@ -548,6 +583,7 @@ async function handleApi(request, env, ctx, url) {
     ds.ipos.forEach((i) => {
       if (counts[i.status] !== undefined && inWindow(i, i.status, env)) counts[i.status]++;
     });
+    const vdoc = await getJson(env, 'verify:bse');
     return json({
       fetchedAt: ds.fetchedAt,
       refreshMinutes: Number(env.REFRESH_MINUTES || 10),
@@ -557,6 +593,13 @@ async function handleApi(request, env, ctx, url) {
       counts,
       errors: ds.errors,
       cache: { store: 'kv' },
+      upstream: upstreamState(),
+      verify: {
+        source: 'BSE',
+        fetchedAt: vdoc ? vdoc.fetchedAt : null,
+        counts: vdoc ? { issues: vdoc.issues.length, listed: vdoc.listed.length } : null,
+        breaker: verifyState(),
+      },
     });
   }
 
@@ -602,6 +645,7 @@ async function handleApi(request, env, ctx, url) {
         `<p style="font-size:12px;color:#8a94ad">Sorry to see you go — you can always resubscribe on the site.</p></div></body></html>`
     );
   }
+
 
   return json({ error: 'Not found' }, 404);
 }

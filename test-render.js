@@ -46,6 +46,7 @@ const FIXTURE = {
   nseSymbol: 'ZOMATO',
   detailUrl: 'https://www.chittorgarh.com/ipo/zomato-ipo/1895/',
   source: 'chittorgarh',
+  verification: { source: 'BSE', verified: true, matchedBy: 'name', mismatches: [], checkedAt: TS },
   score: {
     score: 62.5, verdict: 'Apply', tone: 'good', confidence: 'high',
     pillars: {
@@ -198,10 +199,12 @@ setTimeout(() => {
           'id="subForm"',
           'sub-prefs',
           'You&rsquo;re on the list!',
+          'Cross-checked with BSE',
         ]
       : MODE === 'sparse'
-        ? // upcoming IPO with only a price band: exactly one chart card.
-          ['Never miss an IPO', 'id="subForm"', 'Price band', 'low ₹408', 'high ₹429', 'issue ₹429']
+        ? // upcoming IPO with no chartable numbers: the explicit empty state
+          // shows and the price band renders as plain issue-details rows.
+          ['Never miss an IPO', 'id="subForm"', 'Price band', '₹408 – ₹429', '₹429 per share', 'No charts for this IPO yet']
         : MODE === 'bare'
           ? // nothing chartable: the explicit empty state must show.
             ['Company in charts', 'No charts for this IPO yet', 'Never miss an IPO', 'id="subForm"']
@@ -218,11 +221,11 @@ setTimeout(() => {
     missing.push('stale banner must be hidden for fresh data');
   }
 
-  if (DETAILISH && chartCards !== 6) missing.push(`chart-card count ${chartCards} !== 6`);
+  if (DETAILISH && chartCards !== 5) missing.push(`chart-card count ${chartCards} !== 5`);
   if (MODE === 'sparse') {
-    // upcoming IPO with only a price band: one chart card (Price band), no note.
-    if (chartCards !== 1) missing.push(`chart-card count ${chartCards} !== 1`);
-    if (html.includes('No charts for this IPO yet')) missing.push('empty-state note must be absent when a chart exists');
+    // upcoming IPO with no chartable numbers: zero cards + the empty state note.
+    if (chartCards !== 0) missing.push(`chart-card count ${chartCards} !== 0`);
+    if (!html.includes('No charts for this IPO yet')) missing.push('charts empty-state note missing');
   }
   if (MODE === 'bare') {
     // nothing chartable at all: section renders with the explicit empty state.
