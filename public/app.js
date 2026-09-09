@@ -147,10 +147,10 @@
               <stop offset="0%" stop-color="${col}"/><stop offset="100%" stop-color="${glow}"/>
             </linearGradient>
           </defs>
-          <circle cx="${cx}" cy="${cy}" r="${r - stroke * 0.55}" fill="none" stroke="var(--track)" stroke-width="${stroke * 0.55}" opacity="0.6"/>
+          <circle cx="${cx}" cy="${cy}" r="${r - stroke * 0.55}" fill="none" stroke="var(--track)" stroke-width="${stroke * 0.75}" opacity="0.95"/>
           <circle class="ring-arc" cx="${cx}" cy="${cy}" r="${r - stroke * 0.55}" fill="none" stroke="url(#${uid})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/>
         </svg>
-        <span class="val" style="font-size:${size * 0.32}px">${pct.toFixed(0)}</span>
+        <span class="val" style="font-size:${size * 0.34}px">${pct.toFixed(0)}</span>
       </div>`;
   }
 
@@ -325,8 +325,8 @@
     app.innerHTML = `
       <section class="hero">
         <h1>India&rsquo;s IPOs, <span class="grad">decoded</span></h1>
-        <p class="hero-sub">Upcoming, open &amp; recently listed IPOs with full details — subscription, fundamentals,
-          valuation and a transparent 0–100 investability score.</p>
+        <p class="hero-sub">Track upcoming IPOs, analyse fundamentals and valuations, and make more
+          informed investment decisions — every issue scored 0–100 for investability.</p>
         <div class="chips">
           <button class="chip" data-tab="upcoming"><span class="n">${m.counts.upcoming ?? 0}</span><span class="l">Upcoming · 31 days</span></button>
           <button class="chip" data-tab="open"><span class="n">${m.counts.open ?? 0}</span><span class="l">Open now</span></button>
@@ -534,7 +534,7 @@
               ${verifyChip(i.verification)}
             </div>
           </div>
-          ${scoreRing(sc ?? 0, tone, 52)}
+          ${scoreRing(sc ?? 0, tone, 56)}
         </div>
         <div class="kv">
           <div><span class="k">Price</span><span class="v">${i.issuePrice != null ? inr(i.issuePrice) : '—'}</span></div>
