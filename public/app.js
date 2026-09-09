@@ -321,11 +321,11 @@
     if (track) {
       // Layout reads are guarded: test DOM shims (and edge browsers) may not
       // implement scrollWidth/clientWidth — in that case just use the default pace.
+      // The ticker always moves (even when one tile set fits a wide monitor).
       const half = (track.scrollWidth || 0) / 2;
       const box = (track.parentElement && track.parentElement.clientWidth) || 0;
       if (half > 0 && box > 0) {
-        if (half <= box) track.style.animation = 'none';
-        else track.style.animationDuration = `${Math.min(40, Math.max(12, Math.round(half / 36)))}s`;
+        track.style.animationDuration = `${Math.min(40, Math.max(12, Math.round(half / 36)))}s`;
       }
     }
     // Press-and-hold pauses the marquee (touch never fires :active on plain divs).
