@@ -80,7 +80,8 @@
   };
 
   /* ---------------- state + router ---------------- */
-  const state = { tab: 'upcoming', category: 'mainboard', q: '', sort: 'recent', all: false, meta: null, shown: 12 }; // mainboard is the default view (most investors) — visitors can switch to SME or All via the filter
+  const state = { tab: 'upcoming', tabTouched: false, category: 'mainboard', q: '', sort: 'recent', all: false, meta: null, shown: 12 }; // mainboard is the default view (most investors); the tab starts on "Open now" when an issue is actually open (see loadMeta)
+  let firstMetaLoad = true; // the tab auto-selection only considers the very first meta response
 
   function go(url) {
     history.pushState({}, '', SITE_BASE === '/' ? url : SITE_BASE.replace(/\/$/, '') + url);
@@ -213,7 +214,20 @@
       .then((m) => {
         state.meta = m;
         setLive(m.fetchedAt);
-        if (!appPath().startsWith('/ipo/')) renderList({ keep: true });
+        const first = firstMetaLoad;
+        firstMetaLoad = false;
+        if (!appPath().startsWith('/ipo/')) {
+          // "Open now" is the most actionable tab, so the first visit starts
+          // there whenever an issue is actually open (falling back to Upcoming
+          // on quiet days). Never overrides a tab the visitor already picked,
+          // and never yanks the view on later meta refreshes.
+          if (first && !state.tabTouched && m.counts && m.counts.open > 0) {
+            state.tab = 'open';
+            renderList();
+            return;
+          }
+          renderList({ keep: true });
+        }
       })
       .catch((e) => setLive(null, e));
   }
@@ -349,15 +363,15 @@
         <p class="hero-sub">Track upcoming IPOs, analyse fundamentals and valuations, and make more
           informed investment decisions — every issue scored 0–100 for investability.</p>
         <div class="chips">
-          <button class="chip" data-tab="upcoming"><span class="n">${m.counts.upcoming ?? 0}</span><span class="l">Upcoming · 31 days</span></button>
           <button class="chip" data-tab="open"><span class="n">${m.counts.open ?? 0}</span><span class="l">Open now</span></button>
+          <button class="chip" data-tab="upcoming"><span class="n">${m.counts.upcoming ?? 0}</span><span class="l">Upcoming · 31 days</span></button>
           <button class="chip" data-tab="listed"><span class="n">${m.counts.listed ?? 0}</span><span class="l">Listed · last 31 days</span></button>
         </div>
       </section>
 
       <div class="toolbar">
         <div class="tabs">
-          ${['upcoming', 'open', 'closed', 'listed']
+          ${['open', 'upcoming', 'closed', 'listed']
             .map(
               (t) =>
                 `<button class="tab ${state.tab === t ? 'active' : ''}" data-tab="${t}">${STATUS_META[t].label}` +
@@ -404,6 +418,7 @@
   function bindListControls() {
     app.querySelectorAll('.chip, .tab').forEach((el) =>
       el.addEventListener('click', () => {
+        state.tabTouched = true; // visitor picked a tab — stop auto-selecting
         state.tab = el.dataset.tab;
         state.shown = 12;
         renderList();
