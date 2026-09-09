@@ -631,6 +631,40 @@
       .join('')}</div>`;
   }
 
+  /** Horizontal 0–100% bars (promoter holding). rows = [{ label, value, color }] */
+  function pctBarsHTML(rows) {
+    return `<div class="funds">${rows
+      .map(
+        (r0) => `<div class="fund-row">
+          <div class="fund-head"><span class="l">${esc(r0.label)}</span><span class="v" style="color:${r0.color}">${pct(r0.value)}</span></div>
+          <div class="fund-track"><div class="fund-fill" style="width:${Math.max(2, Math.min(100, Number(r0.value) || 0)).toFixed(1)}%;background:${r0.color}"></div></div>
+        </div>`
+      )
+      .join('')}</div>`;
+  }
+
+  /** Price-band range bar with an issue-price marker — renders for every IPO
+   *  that has a band, including upcoming ones with no other numbers yet. */
+  function priceBandSVG(low, high, issue) {
+    const W = 470, H = 120, padX = 18, barY = 48, barH = 24;
+    const w = W - padX * 2;
+    const uid = `pb${++_chartUid}`;
+    let marker = '';
+    if (issue != null && issue >= low && issue <= high) {
+      const fx = padX + ((issue - low) / (high - low || 1)) * w;
+      const tx = Math.min(W - padX - 34, Math.max(padX + 34, fx));
+      marker = `<line x1="${fx.toFixed(1)}" y1="${barY - 9}" x2="${fx.toFixed(1)}" y2="${barY + barH + 9}" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>
+        <text x="${tx.toFixed(1)}" y="${barY - 15}" class="val-txt" text-anchor="middle">issue ${inr(issue)}</text>`;
+    }
+    return `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Price band chart: ${inr(low)} to ${inr(high)} per share">
+      <defs><linearGradient id="${uid}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--brand)"/><stop offset="1" stop-color="var(--brand-2)"/></linearGradient></defs>
+      <rect x="${padX}" y="${barY}" width="${w}" height="${barH}" rx="${barH / 2}" fill="url(#${uid})" opacity="0.92"/>
+      ${marker}
+      <text x="${padX}" y="${barY + barH + 26}" class="cat-txt">low ${inr(low)}</text>
+      <text x="${W - padX}" y="${barY + barH + 26}" class="cat-txt" text-anchor="end">high ${inr(high)}</text>
+    </svg>`;
+  }
+
   /** Builds the chart cards AND reports which of them rendered, so
    *  renderDetailBody can drop text panels that would duplicate the charts. */
   function chartsHTML(i) {
@@ -638,7 +672,16 @@
     const f = i.financials || {};
     const k = i.kpi || {};
     const cards = [];
-    const flags = { finBars: false, meters: false, donut: false, funds: false };
+    const flags = { finBars: false, meters: false, donut: false, funds: false, priceBand: false, promoters: false };
+
+    // Price band first — every IPO has pricing, and for upcoming IPOs this is
+    // often the only chartable number. Drops the duplicated issue-details rows.
+    const bandLow = d.priceBandLow, bandHigh = d.priceBandHigh;
+    const issuePx = i.issuePrice != null ? i.issuePrice : d.issuePrice != null ? d.issuePrice : null;
+    if (bandLow != null && bandHigh != null && bandHigh >= bandLow) {
+      flags.priceBand = true;
+      cards.push(chartCard('Price band', issuePx != null ? `bid within ₹${numFmt(bandLow, 0)}–₹${numFmt(bandHigh, 0)}` : 'issue pricing', priceBandSVG(bandLow, bandHigh, issuePx)));
+    }
 
     // 1 — Financials at a glance (vertical bars, ₹ Cr)
     const finItems = [
@@ -697,13 +740,25 @@
     if (donutSvg) {
       flags.donut = true;
       cards.push(chartCard('Issue structure', 'fresh money vs exiting holders', donutSvg));
-    } else if (d.objects && d.objects.filter((o) => o.amountCr > 0).length >= 2) {
+    } else if (d.objects && d.objects.filter((o) => o.amountCr > 0).length >= 1) {
       flags.funds = true;
       const objs = d.objects
         .filter((o) => o.amountCr > 0)
         .sort((a, b) => b.amountCr - a.amountCr)
         .slice(0, 5);
       cards.push(chartCard('Use of funds', 'objects of the issue · ₹ crore', fundsHTML(objs)));
+    }
+
+    // Promoter holding — before vs after the issue; the dilution story in one
+    // glance. Lets the Promoters panel keep just the names.
+    const pr = d.promoters || {};
+    if (pr.preIssuePct != null || pr.postIssuePct != null) {
+      flags.promoters = true;
+      const rows = [];
+      if (pr.preIssuePct != null) rows.push({ label: 'Before issue', value: pr.preIssuePct, color: 'var(--brand)' });
+      if (pr.postIssuePct != null) rows.push({ label: 'After issue', value: pr.postIssuePct, color: 'var(--neutral)' });
+      const floatPct = pr.postIssuePct != null ? 100 - pr.postIssuePct : null;
+      cards.push(chartCard('Promoter holding', floatPct != null ? `public float grows to ${pct(floatPct)}` : 'dilution from the issue', pctBarsHTML(rows)));
     }
 
     if (!cards.length) {
@@ -825,11 +880,15 @@
       .join('')}</div>`;
   }
 
-  function promotersHTML(p) {
+  function promotersHTML(p, charted) {
     const rows = [];
-    if (p.preIssuePct != null) rows.push(['Pre-issue holding', pct(p.preIssuePct)]);
-    if (p.postIssuePct != null) rows.push(['Post-issue holding', pct(p.postIssuePct)]);
-    if (p.dilution != null) rows.push(['Dilution', pct(p.dilution)]);
+    // Holding/dilution numbers live in the "Promoter holding" chart card when
+    // rendered — the panel then keeps only the names.
+    if (!charted) {
+      if (p.preIssuePct != null) rows.push(['Pre-issue holding', pct(p.preIssuePct)]);
+      if (p.postIssuePct != null) rows.push(['Post-issue holding', pct(p.postIssuePct)]);
+      if (p.dilution != null) rows.push(['Dilution', pct(p.dilution)]);
+    }
     const names = p.names ? `<div style="font-size:13px;color:var(--ink-2);margin-top:10px">${esc(p.names)}</div>` : '';
     const kv = detailKV(rows);
     if (!kv && !names) return null;
@@ -889,9 +948,15 @@
 
     // Two-tier issue details: the five numbers people scan first stay visible;
     // reference metadata (codes, sale type…) folds into a collapsed block.
+    // Price band / issue price rows are dropped when the price-band chart
+    // already shows band low–high and the issue-price marker.
     const essentialRows = [
-      ['Price band', i.issuePrice != null && d.priceBandLow != null ? `${inr(d.priceBandLow)} – ${inr(d.priceBandHigh)}` : i.issuePrice != null ? inr(i.issuePrice) : '—'],
-      ['Issue price', i.issuePrice != null ? `${inr(i.issuePrice)} per share` : '—'],
+      ...(charts.flags.priceBand
+        ? []
+        : [
+            ['Price band', i.issuePrice != null && d.priceBandLow != null ? `${inr(d.priceBandLow)} – ${inr(d.priceBandHigh)}` : i.issuePrice != null ? inr(i.issuePrice) : '—'],
+            ['Issue price', i.issuePrice != null ? `${inr(i.issuePrice)} per share` : '—'],
+          ]),
       ['Lot size', d.lotSize != null ? `${numFmt(d.lotSize)} shares` : '—'],
       ['Total issue size', i.issueAmountCr != null ? `${cr(i.issueAmountCr)}${d.totalIssueShares ? ` · ${numFmt(d.totalIssueShares)} shares` : ''}` : '—'],
       ['Listing at', i.exchange || d.listingAt || '—'],
@@ -955,7 +1020,7 @@
 
     const rev = i.reviews || { subscribe: 0, neutral: 0, avoid: 0 };
     const revTotal = Math.max(1, rev.subscribe + rev.neutral + rev.avoid);
-    const promo = d.promoters ? promotersHTML(d.promoters) : '';
+    const promo = d.promoters ? promotersHTML(d.promoters, charts.flags.promoters) : '';
     const subBody = subRows.length
       ? subHTML(subRows, subMax)
       : i.subscriptionX != null

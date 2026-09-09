@@ -3,11 +3,11 @@
  * fixture IPO record and asserts that the "Company in charts" section and
  * the subscribe card render with no NaN/undefined leaks.
  *
- * Usage: node test-render.js [detail|list|sparse]
+ * Usage: node test-render.js [detail|list|sparse|bare]
  */
 const path = require('path');
 const TS = '2026-09-05T10:00:00.000Z';
-const MODE = process.argv[2] || 'detail'; // detail | list | sparse
+const MODE = process.argv[2] || 'detail'; // detail | list | sparse | bare
 const SPARSE = MODE === 'sparse';
 
 const FIXTURE = {
@@ -83,6 +83,20 @@ const FIXTURE = {
   },
 };
 
+/** Absolutely nothing chartable — price band, promoters, objects, financials
+ *  all missing. Exercises the "No charts for this IPO yet" empty state. */
+const BARE = {
+  id: 3002, name: 'Bare Bones Ltd.', slug: 'bare-ipo', category: 'SME', exchange: 'BSE',
+  status: 'upcoming', openDate: '2026-09-28', closeDate: '2026-09-30', listingDate: null,
+  issuePrice: null, issueAmountCr: null, subscriptionX: null,
+  subscription: {}, listing: {}, market: {}, financials: {}, kpi: {},
+  reviews: { subscribe: 0, neutral: 0, avoid: 0 }, anchors: {},
+  isin: null, bseCode: null, nseSymbol: null,
+  detailUrl: 'https://www.chittorgarh.com/ipo/bare-ipo/3002/', source: 'chittorgarh',
+  score: { score: 30, verdict: 'Hold / Watch', tone: 'neutral', confidence: 'low', pillars: {} },
+  detail: { timetable: { open: 'Sep 28, 2026', close: 'Sep 30, 2026' }, objects: [], promoters: null },
+};
+
 const SUMMARY = {
   id: FIXTURE.id, name: FIXTURE.name, slug: FIXTURE.slug, category: 'Mainboard', exchange: 'NSE',
   status: 'listed', openDate: FIXTURE.openDate, closeDate: FIXTURE.closeDate,
@@ -125,7 +139,7 @@ global.fetch = (url) => {
   const u = String(url);
   let data = {};
   if (/^\/api\/ipos\/\d+/.test(u)) {
-    const ipo = SPARSE
+    const ipo = MODE === 'bare' ? BARE : SPARSE
       ? {
           id: 3001, name: 'Upcoming Industries Ltd.', slug: 'upcoming-ipo', category: 'SME', exchange: 'NSE',
           status: 'upcoming', openDate: '2026-09-20', closeDate: '2026-09-24', listingDate: null,
@@ -163,6 +177,8 @@ setTimeout(() => {
           'Profitability &amp; returns',
           'Price journey',
           'Issue structure',
+          'Price band',
+          'Promoter holding',
           'donut-wrap',
           'aria-label="Bar chart:',
           '52w high',
@@ -172,16 +188,24 @@ setTimeout(() => {
           'You&rsquo;re on the list!',
         ]
       : MODE === 'sparse'
-        ? ['Never miss an IPO', 'id="subForm"', 'No charts for this IPO yet']
-        : ['Never miss an IPO', 'id="subForm"', 'sub-prefs', 'Weekly digest'];
+        ? // upcoming IPO with only a price band: exactly one chart card.
+          ['Never miss an IPO', 'id="subForm"', 'Price band', 'low ₹408', 'high ₹429', 'issue ₹429']
+        : MODE === 'bare'
+          ? // nothing chartable: the explicit empty state must show.
+            ['Company in charts', 'No charts for this IPO yet', 'Never miss an IPO', 'id="subForm"']
+          : ['Never miss an IPO', 'id="subForm"', 'sub-prefs', 'Weekly digest'];
   const missing = must.filter((s) => !html.includes(s));
   const leaks = ['NaN', 'undefined'].filter((s) => html.includes(s));
   const chartCards = (html.match(/class="chart-card"/g) || []).length;
 
-  if (MODE === 'detail' && chartCards !== 4) missing.push(`chart-card count ${chartCards} !== 4`);
+  if (MODE === 'detail' && chartCards !== 6) missing.push(`chart-card count ${chartCards} !== 6`);
   if (MODE === 'sparse') {
-    // upcoming IPO with no financials/market data: no chart cards, but the
-    // section must still render with the explicit empty-state note.
+    // upcoming IPO with only a price band: one chart card (Price band), no note.
+    if (chartCards !== 1) missing.push(`chart-card count ${chartCards} !== 1`);
+    if (html.includes('No charts for this IPO yet')) missing.push('empty-state note must be absent when a chart exists');
+  }
+  if (MODE === 'bare') {
+    // nothing chartable at all: section renders with the explicit empty state.
     if (chartCards !== 0) missing.push(`chart-card count ${chartCards} !== 0`);
     if (!html.includes('No charts for this IPO yet')) missing.push('charts empty-state note missing');
   }
