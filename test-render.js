@@ -248,6 +248,17 @@ setTimeout(() => {
     if (!strip.innerHTML.includes('Sensex') || !strip.innerHTML.includes('Gold')) {
       missing.push('market strip quote names missing');
     }
+    // Yahoo-style change cell: solid ▲/▼ arrow + absolute change + (percent).
+    if (!strip.innerHTML.includes('mt-arr')) missing.push('market strip arrow span missing');
+    if (!strip.innerHTML.includes('▲') || !strip.innerHTML.includes('▼')) {
+      missing.push('market strip up/down arrows missing');
+    }
+    if (!strip.innerHTML.includes('-813.35') || !strip.innerHTML.includes('+25')) {
+      missing.push('market strip absolute change missing');
+    }
+    if (!strip.innerHTML.includes('(-1.08%)') || !strip.innerHTML.includes('(+0.56%)')) {
+      missing.push('market strip percent-in-parens missing');
+    }
     if (/\bNaN\b|\bundefined\b/.test(strip.innerHTML)) missing.push('market strip has NaN/undefined leak');
   }
 
