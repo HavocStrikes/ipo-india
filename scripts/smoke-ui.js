@@ -8,6 +8,9 @@ const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 
+// Dynamic fresh timestamp (5 min old) → staleness banner must stay hidden.
+const FRESH_ISO = new Date(Date.now() - 5 * 60000).toISOString();
+
 const els = new Map();
 function makeEl() {
   return {
@@ -25,6 +28,9 @@ function makeEl() {
     querySelectorAll() { return []; },
     setAttribute() {},
     focus() {},
+    remove() {},
+    insertBefore() {},
+    appendChild() {},
   };
 }
 function getEl(sel) {
@@ -35,6 +41,8 @@ function getEl(sel) {
 const documentStub = {
   title: '',
   documentElement: { dataset: { theme: 'dark' } },
+  body: getEl('body'),
+  createElement: () => makeEl(),
   querySelector(sel) {
     if (sel === 'a.brand') return null;
     if (sel.startsWith('meta')) return { content: '' };
@@ -52,7 +60,7 @@ const listIpo = {
 };
 
 const detailResp = {
-  fetchedAt: '2026-09-09T02:00:00Z',
+  fetchedAt: FRESH_ISO,
   ipo: {
     ...listIpo,
     listingDate: '2026-09-15',
@@ -85,8 +93,8 @@ const fetchStub = (url) => {
   let body;
   if (/\/api\/ipos\/\d+/.test(url)) body = detailResp;
   else if (url.includes('/api/meta'))
-    body = { counts: { upcoming: 5, open: 2, closed: 3, listed: 7 }, windowDays: 31, total: 604, fetchedAt: '2026-09-09T02:00:00Z' };
-  else body = { fetchedAt: '2026-09-09T02:00:00Z', ipos: [listIpo] };
+    body = { counts: { upcoming: 5, open: 2, closed: 3, listed: 7 }, windowDays: 31, total: 604, fetchedAt: FRESH_ISO };
+  else body = { fetchedAt: FRESH_ISO, ipos: [listIpo] };
   return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(JSON.stringify(body))) });
 };
 
@@ -162,6 +170,11 @@ const check = (name, cond) => {
   // Scope to the first score-ring svg; '<line ' (with space) can't match <linearGradient.
   const ringSvg = (html.split('<div class="score-ring')[1] || '').split('</svg>')[0] || '';
   check('score ring simplified (no tick marks)', ringSvg !== '' && !ringSvg.includes('<line '));
+
+  console.log('\n- stale banner -');
+  const sn = els.get('#staleNote');
+  const snHtml = (sn && sn.innerHTML) || '';
+  check('no stale banner with fresh data', !snHtml.includes('last-known data'));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

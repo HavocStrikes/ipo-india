@@ -154,6 +154,29 @@
     return api(`/api/ipos?${p.toString()}`);
   }
 
+  // Banner when the dataset is far older than the refresh cadence — the
+  // upstream feed is down/blocked and we are serving last-known data.
+  const STALE_AFTER_MS = 45 * 60 * 1000; // ~4 missed 10-min refresh cycles
+
+  function setStale(fetchedAt) {
+    const ageMs = fetchedAt ? Date.now() - new Date(fetchedAt).getTime() : 0;
+    let el = $('#staleNote');
+    if (!fetchedAt || ageMs <= STALE_AFTER_MS) {
+      if (el && el.remove) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'staleNote';
+      el.className = 'stale-note';
+      el.setAttribute('role', 'status');
+      document.body.insertBefore(el, document.body.firstChild);
+    }
+    const mins = Math.round(ageMs / 60000);
+    const ageTxt = mins >= 120 ? `${Math.round(mins / 60)} hours` : `${mins} min`;
+    el.innerHTML = `⚠️ Showing last-known data — the upstream feed is temporarily unavailable. Last updated <b>${ageTxt} ago</b>.`;
+  }
+
   function setLive(fetchedAt, err) {
     const stamp = $('#livePill');
     const txt = $('#liveText');
@@ -166,6 +189,7 @@
     txt.textContent = fetchedAt
       ? `Updated ${new Date(fetchedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
       : 'Updated just now';
+    setStale(fetchedAt);
   }
 
   function loadMeta() {

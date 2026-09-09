@@ -20,6 +20,7 @@ const { loadYear, deriveStatus } = require('./lib/normalize');
 const { loadDashboardSchedule, toIpoRecord } = require('./lib/dashboard');
 const { computeScore } = require('./lib/scoring');
 const { loadDetail, mergeDetailIntoIpo } = require('./lib/detail');
+const { upstreamState } = require('./lib/fetcher');
 const {
   addSubscriber,
   removeSubscriber,
@@ -405,13 +406,12 @@ const server = http.createServer(async (req, res) => {
         json(res, 404, { error: 'IPO not found', id });
         return;
       }
-      const detail = await cache.swr(`detail:${id}`, DETAIL_TTL, async () => {
-        try {
-          return await loadDetail(ipo);
-        } catch (err) {
-          return { error: String(err.message || err) };
-        }
-      });
+      // SWR serves last-good detail when upstream fails or fast-fails (fetcher
+      // cooldown). Only a cold miss with a dead upstream yields the error
+      // object — and it is never cached, so no 30-min poison entry.
+      const detail = await cache
+        .swr(`detail:${id}`, DETAIL_TTL, () => loadDetail(ipo))
+        .catch(() => ({ error: 'Detail temporarily unavailable — upstream feed is down.' }));
       const merged = mergeDetailIntoIpo(ipo, detail, deriveStatus);
       json(res, 200, { fetchedAt: ds.fetchedAt, ipo: merged, detail });
       return;
@@ -432,6 +432,7 @@ const server = http.createServer(async (req, res) => {
         counts,
         errors: ds.errors,
         cache: cache.stats(),
+        upstream: upstreamState(),
       });
       return;
     }

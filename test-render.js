@@ -3,11 +3,15 @@
  * fixture IPO record and asserts that the "Company in charts" section and
  * the subscribe card render with no NaN/undefined leaks.
  *
- * Usage: node test-render.js [detail|list|sparse|bare]
+ * Usage: node test-render.js [detail|list|sparse|bare|stale]
  */
 const path = require('path');
-const TS = '2026-09-05T10:00:00.000Z';
-const MODE = process.argv[2] || 'detail'; // detail | list | sparse | bare
+const MODE = process.argv[2] || 'detail'; // detail | list | sparse | bare | stale
+// fetchedAt is dynamic so the staleness banner logic is exercised correctly:
+// 4 min old → fresh (no banner); 'stale' mode → 3 h old (banner must show).
+const FRESH_TS = new Date(Date.now() - 4 * 60000).toISOString();
+const STALE_TS = new Date(Date.now() - 3 * 3600000).toISOString();
+const TS = MODE === 'stale' ? STALE_TS : FRESH_TS;
 const SPARSE = MODE === 'sparse';
 
 const FIXTURE = {
@@ -113,22 +117,29 @@ const META = {
 };
 
 /* ---- minimal DOM shim ---- */
+const els = new Map();
+function getEl(sel) {
+  if (!els.has(sel)) els.set(sel, makeEl());
+  return els.get(sel);
+}
 function makeEl() {
   return {
     dataset: {}, innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', style: {},
     classList: { add() {}, remove() {}, contains: () => false },
     addEventListener() {}, removeEventListener() {},
     querySelector: () => makeEl(), querySelectorAll: () => [],
-    appendChild() {}, focus() {}, setAttribute() {}, getAttribute: () => null,
+    appendChild() {}, insertBefore() {}, remove() { this._removed = true; },
+    focus() {}, setAttribute() {}, getAttribute: () => null,
   };
 }
-const appEl = makeEl();
+const appEl = getEl('#app');
 
 global.document = {
-  querySelector: (sel) => (sel === '#app' ? appEl : makeEl()),
+  querySelector: (sel) => (sel === '#app' ? appEl : getEl(sel)),
   documentElement: { dataset: { theme: 'dark' } },
   title: '',
-  body: makeEl(),
+  body: getEl('body'),
+  createElement: () => makeEl(),
   addEventListener() {},
 };
 global.window = { addEventListener() {}, matchMedia: () => ({ matches: true }), scrollTo() {} };
@@ -169,8 +180,9 @@ require(path.join(__dirname, 'public', 'app.js'));
 
 setTimeout(() => {
   const html = appEl.innerHTML || '';
+  const DETAILISH = MODE === 'detail' || MODE === 'stale';
   const must =
-    MODE === 'detail'
+    DETAILISH
       ? [
           'Company in charts',
           'Financials at a glance',
@@ -197,8 +209,16 @@ setTimeout(() => {
   const missing = must.filter((s) => !html.includes(s));
   const leaks = ['NaN', 'undefined'].filter((s) => html.includes(s));
   const chartCards = (html.match(/class="chart-card"/g) || []).length;
+  const staleNote = els.get('#staleNote');
+  if (MODE === 'stale') {
+    if (!staleNote || !staleNote.innerHTML.includes('last-known data')) {
+      missing.push('stale banner must show when fetchedAt is old');
+    }
+  } else if (staleNote && staleNote.innerHTML) {
+    missing.push('stale banner must be hidden for fresh data');
+  }
 
-  if (MODE === 'detail' && chartCards !== 6) missing.push(`chart-card count ${chartCards} !== 6`);
+  if (DETAILISH && chartCards !== 6) missing.push(`chart-card count ${chartCards} !== 6`);
   if (MODE === 'sparse') {
     // upcoming IPO with only a price band: one chart card (Price band), no note.
     if (chartCards !== 1) missing.push(`chart-card count ${chartCards} !== 1`);

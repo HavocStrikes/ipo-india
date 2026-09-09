@@ -246,19 +246,36 @@ async function refreshData(env) {
   const minute = now.getUTCMinutes();
   const slot = Math.floor(minute / 10); // 0..5
 
-  // 1. current year + dashboard
-  const cur = await buildCurrentYearDataset(env);
-  await putJson(env, `records:${y}`, cur);
-  await putJson(env, `list:${y}`, listVersion(cur));
+  // 1. current year + dashboard.
+  // Ban-resilience: if upstream returned nothing usable (e.g. we are being
+  // blocked), KEEP the last-good KV data instead of blanking the live site,
+  // and reuse it for the `notable` rebuild below. The next healthy cron run
+  // heals everything automatically.
+  const fresh = await buildCurrentYearDataset(env);
+  const prevCur = await getJson(env, `records:${y}`);
+  const cur = prevCur && prevCur.ipos && prevCur.ipos.length && !fresh.ipos.length ? prevCur : fresh;
+  if (cur === prevCur) {
+    console.error(
+      `[refresh] upstream returned 0 IPOs (${fresh.errors.length} errors) — keeping last-good data from ${prevCur.fetchedAt}`
+    );
+  } else {
+    await putJson(env, `records:${y}`, cur);
+    await putJson(env, `list:${y}`, listVersion(cur));
+  }
 
   // 2. previous year (every 6h, or immediately when missing)
   let prevList = await getJson(env, `list:${py}`);
   if (!prevList || (slot === 0 && now.getUTCHours() % 6 === 0)) {
     try {
       const prev = await buildPastYearDataset(py);
-      await putJson(env, `records:${py}`, prev);
-      await putJson(env, `list:${py}`, listVersion(prev));
-      prevList = listVersion(prev);
+      if (prev.ipos.length) {
+        // never overwrite good history with an empty/degraded rebuild
+        await putJson(env, `records:${py}`, prev);
+        await putJson(env, `list:${py}`, listVersion(prev));
+        prevList = listVersion(prev);
+      } else {
+        console.error(`[refresh] past year ${py} build was empty — keeping existing KV`);
+      }
     } catch (err) {
       console.error(`[refresh] past year ${py} failed:`, err && err.message);
     }
@@ -273,12 +290,16 @@ async function refreshData(env) {
     try {
       const built = await buildPastYearDataset(rotYear);
       const matches = built.ipos.filter((ipo) => nameMatches(ipo.name));
-      await putJson(env, `notableold:${rotYear}`, {
-        year: rotYear,
-        fetchedAt: built.fetchedAt,
-        count: matches.length,
-        ipos: matches,
-      });
+      if (built.ipos.length) {
+        await putJson(env, `notableold:${rotYear}`, {
+          year: rotYear,
+          fetchedAt: built.fetchedAt,
+          count: matches.length,
+          ipos: matches,
+        });
+      } else {
+        console.error(`[refresh] notable year ${rotYear} build was empty — keeping existing KV`);
+      }
     } catch (err) {
       console.error(`[refresh] notable year ${rotYear} failed:`, err && err.message);
     }
@@ -471,7 +492,7 @@ async function handleApi(request, env, ctx, url) {
     // fast path: merged record cached from a recent view
     const cachedIpo = await getJson(env, `ipo:${id}`);
     const cachedDetail = await getJson(env, `detail:${id}`);
-    if (cachedIpo && cachedDetail) {
+    if (cachedIpo && cachedDetail && !cachedDetail.error) {
       return json({ fetchedAt: cachedIpo.fetchedAt, ipo: cachedIpo.ipo, detail: cachedDetail });
     }
 
@@ -492,16 +513,32 @@ async function handleApi(request, env, ctx, url) {
     const ipo = records && records.ipos.find((i) => i.id === id);
     if (!ipo) return json({ error: 'IPO not found', id }, 404);
 
-    let detail;
+    // Scrape fresh detail. On failure fall back to the never-expiring
+    // last-good copy, so an upstream block degrades to "stale detail" instead
+    // of an error — and an error is never cached for 30 minutes.
+    let detail = null;
     try {
       detail = await loadDetail(ipo);
     } catch (err) {
-      detail = { error: String((err && err.message) || err) };
+      console.error(`[detail] scrape failed for ${id}:`, err && err.message);
     }
-    const merged = mergeDetailIntoIpo(ipo, detail, deriveStatus);
-    await putJson(env, `ipo:${id}`, { fetchedAt, ipo: merged }, DETAIL_TTL_SECONDS);
-    await putJson(env, `detail:${id}`, detail, DETAIL_TTL_SECONDS);
-    return json({ fetchedAt, ipo: merged, detail });
+    if (detail && Object.keys(detail).length > 0) {
+      const merged = mergeDetailIntoIpo(ipo, detail, deriveStatus);
+      await Promise.all([
+        putJson(env, `ipo:${id}`, { fetchedAt, ipo: merged }, DETAIL_TTL_SECONDS),
+        putJson(env, `detail:${id}`, detail, DETAIL_TTL_SECONDS),
+        putJson(env, `lastgood:detail:${id}`, detail), // no TTL — survives bans
+      ]);
+      return json({ fetchedAt, ipo: merged, detail });
+    }
+    const lastGood = await getJson(env, `lastgood:detail:${id}`);
+    if (lastGood) {
+      const merged = mergeDetailIntoIpo(ipo, lastGood, deriveStatus);
+      return json({ fetchedAt, ipo: merged, detail: lastGood, stale: true });
+    }
+    const errDetail = { error: 'Detail temporarily unavailable — upstream feed is down. Please retry shortly.' };
+    const mergedErr = mergeDetailIntoIpo(ipo, errDetail, deriveStatus);
+    return json({ fetchedAt, ipo: mergedErr, detail: errDetail, stale: true });
   }
 
   if (p === '/api/meta') {
