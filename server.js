@@ -73,6 +73,7 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
 };
 
 function currentYear() {
@@ -561,6 +562,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/app.js') return sendFile(res, path.join(PUBLIC_DIR, 'app.js'));
     if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'));
+    if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'));
+    if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'));
+    if (p.startsWith('/icons/')) {
+      // PWA icons — plain filenames only (the regex blocks ../ traversal).
+      const name = p.slice('/icons/'.length);
+      if (/^[A-Za-z0-9._-]+$/.test(name)) {
+        return sendFile(res, path.join(PUBLIC_DIR, 'icons', name));
+      }
+    }
     if (p === '/healthz') return json(res, 200, { ok: true });
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });

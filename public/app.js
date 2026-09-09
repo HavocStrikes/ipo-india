@@ -123,15 +123,6 @@
       tone === 'great' ? '#34d399' : tone === 'good' ? '#4ade80' : tone === 'neutral' ? '#fbbf24' : tone === 'weak' ? '#fb923c' : tone === 'bad' ? '#f87171' : col;
     const cx = size / 2;
     const cy = size / 2;
-    let ticks = '';
-    const n = 36;
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2;
-      const rad1 = r - stroke * 0.55;
-      const rad2 = r - stroke * 0.12;
-      const on = (k / n) * 100 <= pct;
-      ticks += `<line x1="${(cx + Math.cos(a) * rad1).toFixed(2)}" y1="${(cy + Math.sin(a) * rad1).toFixed(2)}" x2="${(cx + Math.cos(a) * rad2).toFixed(2)}" y2="${(cy + Math.sin(a) * rad2).toFixed(2)}" stroke="${on ? col : 'var(--track)'}" stroke-width="${Math.max(1, stroke * 0.13)}" stroke-linecap="round" opacity="${on ? 1 : 0.5}"/>`;
-    }
     return `
       <div class="score-ring ring-${tone}" style="width:${size}px;height:${size}px">
         <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
@@ -141,7 +132,6 @@
             </linearGradient>
           </defs>
           <circle cx="${cx}" cy="${cy}" r="${r - stroke * 0.55}" fill="none" stroke="var(--track)" stroke-width="${stroke * 0.55}" opacity="0.6"/>
-          ${ticks}
           <circle class="ring-arc" cx="${cx}" cy="${cy}" r="${r - stroke * 0.55}" fill="none" stroke="url(#${uid})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/>
         </svg>
         <span class="val" style="font-size:${size * 0.32}px">${pct.toFixed(0)}</span>
@@ -165,17 +155,17 @@
   }
 
   function setLive(fetchedAt, err) {
-    const pill = $('#livePill');
+    const stamp = $('#livePill');
     const txt = $('#liveText');
     if (err) {
-      pill.classList.add('err');
-      txt.textContent = `data error — retrying`;
+      stamp.classList.add('err');
+      txt.textContent = 'reconnecting…';
       return;
     }
-    pill.classList.remove('err');
+    stamp.classList.remove('err');
     txt.textContent = fetchedAt
-      ? `live · updated ${new Date(fetchedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
-      : 'live';
+      ? `Updated ${new Date(fetchedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+      : 'Updated just now';
   }
 
   function loadMeta() {
@@ -388,7 +378,7 @@
         <div class="kv">
           <div><span class="k">Price</span><span class="v">${i.issuePrice != null ? inr(i.issuePrice) : '—'}</span></div>
           <div><span class="k">Issue size</span><span class="v">${cr(i.issueAmountCr)}</span></div>
-          <div><span class="k">Subscription</span><span class="v">${x(i.subscriptionX)}</span></div>
+          ${i.subscriptionX != null ? `<div><span class="k">Subscription</span><span class="v">${x(i.subscriptionX)}</span></div>` : ''}
           <div><span class="k">${keyDate[0]}</span><span class="v">${dateCell}</span></div>
         </div>
         <div class="card-foot">
@@ -455,18 +445,27 @@
       .join('')}</div>`;
   }
 
+  /** Panel with an empty body renders nothing (keeps the grid uncluttered). */
   const panel = (ic, title, body, full = '') =>
-    `<section class="panel ${full}">
+    body
+      ? `<section class="panel ${full}">
       <h2 class="panel-title"><span class="ic">${ic}</span>${title}</h2>${body}
-    </section>`;
+    </section>`
+      : '';
 
-  const detailKV = (rows) =>
-    `<div class="kv single">${rows
+  /** Key-value list. Rows without real data ("—"/empty) are hidden so panels
+   *  show only signal; returns null when nothing is left, letting the caller
+   *  skip the whole panel instead of showing a wall of dashes. */
+  const detailKV = (rows) => {
+    const live = rows.filter(([, v]) => v != null && String(v).trim() !== '' && String(v).trim() !== '—');
+    if (!live.length) return null;
+    return `<div class="kv single">${live
       .map(
         ([k, v]) =>
           `<div><span class="k">${esc(k)}</span><span class="v ${/^\d|₹/.test(String(v).trim()) ? 'bold' : ''}">${esc(v)}</span></div>`
       )
       .join('')}</div>`;
+  };
 
   /* ---------------- company charts (zero-dependency SVG) ---------------- */
   let _chartUid = 0;
@@ -486,7 +485,7 @@
 
   /** Vertical bar chart. items = [{ label, value, color }] — values in ₹ Cr. */
   function barsChart(items) {
-    const W = 470, H = 232, padT = 26, padB = 34, padX = 8;
+    const W = 470, H = 264, padT = 26, padB = 34, padX = 8;
     const plotW = W - padX * 2;
     const plotH = H - padT - padB;
     const max = Math.max(...items.map((d) => d.value));
@@ -494,8 +493,9 @@
     let grid = '';
     for (let s = 0; s <= steps; s++) {
       const y = padT + plotH * (1 - s / steps);
+      // Subtle gridlines only — exact values are already labelled on each bar,
+      // so numeric axis labels would just repeat the same numbers twice.
       grid += `<line x1="${padX}" y1="${y.toFixed(1)}" x2="${W - padX}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"${s ? ' stroke-dasharray="3 4"' : ''}/>`;
-      if (s < steps) grid += `<text x="${padX + 2}" y="${(y - 4).toFixed(1)}" class="axis-txt">${numFmt((max / steps) * s)}</text>`;
     }
     const slot = plotW / items.length;
     const bw = Math.min(58, slot * 0.56);
@@ -516,7 +516,7 @@
 
   /** Line/area chart. points = [{ label, value }], band = { low, high } (52-week range). */
   function lineChart(points, band) {
-    const W = 470, H = 232, padT = 26, padB = 34, padL = 12, padR = 12;
+    const W = 470, H = 264, padT = 26, padB = 34, padL = 12, padR = 12;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
     const vals = points
@@ -546,12 +546,16 @@
         <text x="${W - padR}" y="${(yHi - 5).toFixed(1)}" class="axis-txt" text-anchor="end">52w high ${inr(band.high)}</text>
         <text x="${W - padR}" y="${(yLo + 13).toFixed(1)}" class="axis-txt" text-anchor="end">52w low ${inr(band.low)}</text>`;
     }
+    const hasBand = bandSvg !== '';
     const dots = pts
       .map((pt, i) => {
         const anchor = i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle';
+        // With the 52-week band drawn, mid-point value labels collide with the
+        // band edge labels — keep exact values for the endpoints only.
+        const showVal = !hasBand || i === 0 || i === pts.length - 1;
         return `<g><title>${esc(pt.label)}: ${inr(pt.value)}</title>
           <circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="4.5" fill="var(--surface)" stroke="${pt.color || 'var(--brand)'}" stroke-width="2.5"/>
-          <text x="${pt.x.toFixed(1)}" y="${(pt.y - 11).toFixed(1)}" class="val-txt" text-anchor="${anchor}">${inr(pt.value)}</text>
+          ${showVal ? `<text x="${pt.x.toFixed(1)}" y="${(pt.y - 11).toFixed(1)}" class="val-txt" text-anchor="${anchor}">${inr(pt.value)}</text>` : ''}
           <text x="${pt.x.toFixed(1)}" y="${H - 13}" class="cat-txt" text-anchor="${anchor}">${esc(pt.label)}</text></g>`;
       })
       .join('');
@@ -605,9 +609,10 @@
         const val = Number(m0.value);
         const color = val >= m0.good ? 'var(--great)' : val >= m0.ok ? 'var(--brand)' : val > 0 ? 'var(--neutral)' : 'var(--bad)';
         const w = Math.max(2, Math.min(100, val));
+        const mark = Math.max(0, Math.min(100, m0.good));
         return `<div class="meter">
           <div class="meter-top"><span class="l">${esc(m0.label)}</span><span class="v" style="color:${color}">${pct(val)}</span></div>
-          <div class="meter-track"><div class="meter-fill" style="width:${w.toFixed(1)}%;background:${color}"></div></div>
+          <div class="meter-track"><div class="meter-fill" style="width:${w.toFixed(1)}%;background:${color}"></div><i class="meter-mark" style="left:${mark.toFixed(1)}%" title="healthy ≥ ${pct(m0.good)}"></i></div>
         </div>`;
       })
       .join('')}</div>`;
@@ -626,11 +631,14 @@
       .join('')}</div>`;
   }
 
+  /** Builds the chart cards AND reports which of them rendered, so
+   *  renderDetailBody can drop text panels that would duplicate the charts. */
   function chartsHTML(i) {
     const d = i.detail || {};
     const f = i.financials || {};
     const k = i.kpi || {};
     const cards = [];
+    const flags = { finBars: false, meters: false, donut: false, funds: false };
 
     // 1 — Financials at a glance (vertical bars, ₹ Cr)
     const finItems = [
@@ -640,8 +648,10 @@
       { label: 'Net worth', value: f.netWorthCr, color: '#38bdf8' },
       { label: 'Borrowings', value: f.borrowingsCr, color: 'var(--weak)' },
     ].filter((it) => it.value != null && it.value > 0);
-    if (finItems.length >= 2)
+    if (finItems.length >= 2) {
+      flags.finBars = true;
       cards.push(chartCard('Financials at a glance', f.period ? `period ended ${dateS(f.period)}` : '₹ crore', barsChart(finItems)));
+    }
 
     // 2 — Profitability & returns (meter bars)
     const meters = [
@@ -650,7 +660,10 @@
       { label: 'Return on net worth', value: k.ronw != null ? k.ronw : k.roe, good: 16, ok: 9 },
       { label: 'ROCE', value: k.roce, good: 15, ok: 9 },
     ].filter((m0) => m0.value != null);
-    if (meters.length) cards.push(chartCard('Profitability &amp; returns', 'higher is better', metersHTML(meters)));
+    if (meters.length) {
+      flags.meters = true;
+      cards.push(chartCard('Profitability &amp; returns', 'higher is better · tick = healthy level', metersHTML(meters)));
+    }
 
     // 3 — Price journey line chart (listed) or price band (upcoming)
     const lg = i.listing || {};
@@ -681,8 +694,11 @@
       segs.push({ label: 'Other / unspecified', value: d.totalIssueShares - knownShares, color: '#64748b' });
     const centerTotal = d.totalIssueShares != null ? d.totalIssueShares : knownShares;
     const donutSvg = segs.length >= 2 && centerTotal > 0 ? donutChart(segs, compactNum(centerTotal), 'total shares') : '';
-    if (donutSvg) cards.push(chartCard('Issue structure', 'fresh money vs exiting holders', donutSvg));
-    else if (d.objects && d.objects.filter((o) => o.amountCr > 0).length >= 2) {
+    if (donutSvg) {
+      flags.donut = true;
+      cards.push(chartCard('Issue structure', 'fresh money vs exiting holders', donutSvg));
+    } else if (d.objects && d.objects.filter((o) => o.amountCr > 0).length >= 2) {
+      flags.funds = true;
       const objs = d.objects
         .filter((o) => o.amountCr > 0)
         .sort((a, b) => b.amountCr - a.amountCr)
@@ -690,14 +706,31 @@
       cards.push(chartCard('Use of funds', 'objects of the issue · ₹ crore', fundsHTML(objs)));
     }
 
-    if (!cards.length) return '';
-    return `<section class="charts" aria-label="Company charts">
+    if (!cards.length) {
+      // Sparse IPO (usually upcoming): no chartable data. Still render the
+      // section with an explicit empty-state so the page doesn't look like
+      // charts were removed — they appear once data lands.
+      return {
+        flags,
+        html: `<section class="charts" aria-label="Company charts">
       <div class="charts-title-row">
         <h2 class="charts-h">${icon('chart')}Company in charts</h2>
-        <span class="charts-note">the same numbers, easier to read</span>
+        <span class="charts-note">the story behind the score, in pictures</span>
+      </div>
+      <p class="charts-empty">No charts for this IPO yet. The financial bars, price journey and issue-structure donut appear once the prospectus discloses financials or the shares start trading.</p>
+    </section>`,
+      };
+    }
+    return {
+      flags,
+      html: `<section class="charts" aria-label="Company charts">
+      <div class="charts-title-row">
+        <h2 class="charts-h">${icon('chart')}Company in charts</h2>
+        <span class="charts-note">the story behind the score, in pictures</span>
       </div>
       <div class="charts-grid">${cards.join('')}</div>
-    </section>`;
+    </section>`,
+    };
   }
 
   function renderDetail(id) {
@@ -721,6 +754,8 @@
   }
 
   function scoreBreakdown(sc) {
+    if (sc == null || sc.score == null)
+      return '<div class="empty" style="padding:10px 0">Score will appear once the issue data is in.</div>';
     const defs = [
       ['demand', 'Demand & subscription', 25],
       ['fundamentals', 'Fundamentals', 25],
@@ -796,7 +831,9 @@
     if (p.postIssuePct != null) rows.push(['Post-issue holding', pct(p.postIssuePct)]);
     if (p.dilution != null) rows.push(['Dilution', pct(p.dilution)]);
     const names = p.names ? `<div style="font-size:13px;color:var(--ink-2);margin-top:10px">${esc(p.names)}</div>` : '';
-    return `${detailKV(rows)}${names}`;
+    const kv = detailKV(rows);
+    if (!kv && !names) return null;
+    return `${kv || ''}${names}`;
   }
 
   function anchorsHTML(i) {
@@ -835,8 +872,9 @@
     const link = detailUrl
       ? `<a class="src-link" href="${esc(detailUrl)}" target="_blank" rel="noopener" style="margin-top:10px;display:inline-block">View source page ↗</a>`
       : '';
-    if (!rows.length) return `${link || '<span class="empty" style="padding:8px">Not available.</span>'}`;
-    return `${detailKV(rows)}${link}`;
+    const kv = detailKV(rows);
+    if (!kv && !link) return '<span class="empty" style="padding:8px">Not available.</span>';
+    return `${kv || ''}${link}`;
   }
 
   function renderDetailBody(i) {
@@ -845,21 +883,42 @@
     const sc = i.score || {};
     const listed = i.status === 'listed';
 
-    const overviewRows = [
+    // Chart cards first — the flags tell us which numbers are already drawn as
+    // charts, so the text panels below can skip those and avoid duplication.
+    const charts = chartsHTML(i);
+
+    // Two-tier issue details: the five numbers people scan first stay visible;
+    // reference metadata (codes, sale type…) folds into a collapsed block.
+    const essentialRows = [
       ['Price band', i.issuePrice != null && d.priceBandLow != null ? `${inr(d.priceBandLow)} – ${inr(d.priceBandHigh)}` : i.issuePrice != null ? inr(i.issuePrice) : '—'],
       ['Issue price', i.issuePrice != null ? `${inr(i.issuePrice)} per share` : '—'],
       ['Lot size', d.lotSize != null ? `${numFmt(d.lotSize)} shares` : '—'],
-      ['Face value', d.faceValue != null ? inr(d.faceValue) : '—'],
       ['Total issue size', i.issueAmountCr != null ? `${cr(i.issueAmountCr)}${d.totalIssueShares ? ` · ${numFmt(d.totalIssueShares)} shares` : ''}` : '—'],
-      ['Fresh issue', d.freshIssueShares != null ? `${numFmt(d.freshIssueShares)} shares` : '—'],
-      ['Offer for sale', d.ofsShares != null ? `${numFmt(d.ofsShares)} shares` : '—'],
+      ['Listing at', i.exchange || d.listingAt || '—'],
+    ];
+    const moreIssueRows = [
+      ['Face value', d.faceValue != null ? inr(d.faceValue) : '—'],
+      // Fresh/OFS share counts are already visualised by the issue-structure donut.
+      ...(charts.flags.donut
+        ? []
+        : [
+            ['Fresh issue', d.freshIssueShares != null ? `${numFmt(d.freshIssueShares)} shares` : '—'],
+            ['Offer for sale', d.ofsShares != null ? `${numFmt(d.ofsShares)} shares` : '—'],
+          ]),
       ['Sale type', d.saleType || '—'],
       ['Issued as', d.issueType || '—'],
-      ['Listing at', i.exchange || d.listingAt || '—'],
       ['BSE code', i.bseCode || '—'],
       ['NSE symbol', i.nseSymbol || '—'],
       ['ISIN', i.isin || '—'],
     ];
+    const essentials = detailKV(essentialRows);
+    const moreKV = detailKV(moreIssueRows);
+    const issueBody = [
+      essentials,
+      moreKV ? `<details class="kv-more"><summary>More issue details</summary><div class="kv-more-body">${moreKV}</div></details>` : '',
+    ]
+      .filter(Boolean)
+      .join('');
 
     const subs = i.subscription || {};
     const subRows = [
@@ -884,12 +943,9 @@
       ['Total borrowings', cr(f.borrowingsCr)],
       ['Total assets', cr(f.assetsCr)],
     ];
+    // Margins & returns live in the "Profitability & returns" meter chart — this
+    // panel keeps only valuation multiples so no number is shown twice.
     const valRows = [
-      ['RoNW', k.ronw != null ? pct(k.ronw) : '—'],
-      ['ROE', k.roe != null ? pct(k.roe) : '—'],
-      ['ROCE', k.roce != null ? pct(k.roce) : '—'],
-      ['PAT margin', k.patMargin != null ? pct(k.patMargin) : '—'],
-      ['EBITDA margin', k.ebitdaMargin != null ? pct(k.ebitdaMargin) : '—'],
       ['P/E pre-issue', k.pePre != null ? `${numFmt(k.pePre)}×` : '—'],
       ['P/E post-issue', k.pePost != null ? `${numFmt(k.pePost)}×` : '—'],
       ['Price / book', k.priceToBook != null ? `${numFmt(k.priceToBook)}×` : '—'],
@@ -899,7 +955,12 @@
 
     const rev = i.reviews || { subscribe: 0, neutral: 0, avoid: 0 };
     const revTotal = Math.max(1, rev.subscribe + rev.neutral + rev.avoid);
-    const promo = d.promoters ? promotersHTML(d.promoters) : '' ;
+    const promo = d.promoters ? promotersHTML(d.promoters) : '';
+    const subBody = subRows.length
+      ? subHTML(subRows, subMax)
+      : i.subscriptionX != null
+        ? detailKV([['Total subscription', x(i.subscriptionX)]])
+        : '';
 
     app.innerHTML = `
       <button class="back" id="backBtn">${icon('arrow')} Back to tracker</button>
@@ -927,23 +988,24 @@
         <div class="hero-score">
           ${scoreRing(sc.score || 0, sc.tone || 'neutral', 84)}
           <div class="hero-side">
+            ${sc.verdict ? `<div class="verdict-big" style="color:${toneColor(sc.tone)}">${esc(sc.verdict)}</div>` : ''}
             <div class="verdict-meta">investability score</div>
             <span class="conf-pill">${esc(sc.confidence || 'low')} confidence</span>
           </div>
         </div>
       </section>
 
-      ${chartsHTML(i)}
+      ${charts.html}
 
       <div class="detail-grid">
-        ${panel(icon('tag'), 'Issue details', detailKV(overviewRows))}
+        ${panel(icon('tag'), 'Issue details', issueBody)}
         ${panel(icon('calendar'), 'IPO timeline', timelineHTML(timelineItems(i)))}
         ${panel(icon('chart'), 'Why this score', scoreBreakdown(sc), 'full')}
-        ${panel(icon('fire'), 'Subscription demand', subHTML(subRows, subMax), i.subscriptionX != null ? '' : 'full')}
-        ${panel(icon('coin'), 'Financials', detailKV(finRows))}
-        ${panel(icon('scale'), 'Valuation & ratios', detailKV(valRows))}
+        ${panel(icon('fire'), 'Subscription demand', subBody, i.subscriptionX != null ? '' : 'full')}
+        ${charts.flags.finBars ? '' : panel(icon('coin'), 'Financials', detailKV(finRows))}
+        ${panel(icon('scale'), 'Valuation &amp; ratios', detailKV(valRows))}
         ${listed || (i.market && i.market.price != null) ? panel(icon('spark'), 'Market & listing performance', perfHTML(i, d.listingDayTrading || {}), 'full') : ''}
-        ${d.objects && d.objects.length ? panel(icon('target'), `Issue objects (${d.objects.length})`, objectsHTML(d.objects)) : ''}
+        ${d.objects && d.objects.length && !charts.flags.funds ? panel(icon('target'), `Issue objects (${d.objects.length})`, objectsHTML(d.objects)) : ''}
         ${promo ? panel(icon('users'), 'Promoters', promo) : ''}
         ${anchorsHTML(i) ? panel(icon('bank'), 'Anchor investors', anchorsHTML(i)) : ''}
         ${panel(icon('star'), 'Community & analyst reviews', reviewsHTML(rev, revTotal))}
@@ -1102,7 +1164,53 @@
       document.documentElement.dataset.theme = next;
       try { localStorage.setItem('ipo-theme', next); } catch (e) {}
       setThemeIcon();
+      // Keep the OS status bar / window tint in sync with the active theme.
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = next === 'dark' ? '#0a0d18' : '#f4f6fd';
     });
+  }
+
+  /* ---------------- PWA: service worker + install prompt ---------------- */
+  function initPwa() {
+    // Tint the status bar to the restored theme (before the user toggles).
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = document.documentElement.dataset.theme === 'dark' ? '#0a0d18' : '#f4f6fd';
+
+    // Register the service worker at the site base so it also works on GitHub
+    // Pages project subpaths. Browsers only allow SW on HTTPS (or localhost).
+    if ('serviceWorker' in navigator) {
+      const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+      if (secure) {
+        navigator.serviceWorker
+          .register(`${SITE_BASE}sw.js`, { scope: SITE_BASE })
+          .catch((err) => console.warn('[pwa] service worker registration failed:', err));
+      }
+    }
+
+    // "Install app" pill — shown when the browser fires beforeinstallprompt
+    // (Android/desktop Chrome & Edge). On iOS the button never appears; users
+    // install via Share → Add to Home Screen instead.
+    const btn = $('#installBtn');
+    if (!btn) return;
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (standalone) return; // already installed — nothing to offer
+    let deferred = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferred = e;
+      btn.classList.add('show');
+    });
+    btn.addEventListener('click', async () => {
+      if (!deferred) return;
+      btn.classList.remove('show');
+      try {
+        deferred.prompt();
+        await deferred.userChoice;
+      } catch (e) { /* user dismissed */ }
+      deferred = null;
+    });
+    window.addEventListener('appinstalled', () => btn.classList.remove('show'));
   }
 
   /* ---------------- boot ---------------- */
@@ -1110,6 +1218,7 @@
   const brand = document.querySelector('a.brand');
   if (brand && SITE_BASE !== '/') brand.setAttribute('href', SITE_BASE);
   initTheme();
+  initPwa();
   route();
   loadMeta();
   // auto-refresh data freshness every 5 min

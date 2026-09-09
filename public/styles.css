@@ -125,16 +125,13 @@ button { font-family: inherit; }
 .brand-sub { font-size: 11px; color: var(--ink-3); letter-spacing: 0.2px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
-.live-pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: rgba(52, 211, 153, 0.12); color: var(--great);
-  border: 1px solid rgba(52, 211, 153, 0.28); border-radius: 999px;
-  font-size: 12px; font-weight: 650; padding: 6px 12px;
+/* Quiet "data freshness" stamp — plain timestamp, no badge/animation,
+ * like mainstream finance sites. Kept IDs livePill/liveText for app.js. */
+.updated-stamp {
+  font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.live-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; box-shadow: 0 0 8px currentColor; }
-.live-pill.err { background: rgba(248, 113, 113, 0.12); color: var(--neg); border-color: rgba(248, 113, 113, 0.32); }
-.live-pill.err .dot { animation: none; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.updated-stamp.err { color: var(--neg); }
 
 .icon-btn {
   width: 36px; height: 36px; border-radius: 11px;
@@ -144,6 +141,14 @@ button { font-family: inherit; }
 }
 .icon-btn:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); }
 .icon-btn.ok { color: var(--good); border-color: var(--good); }
+/* Install-app pill (PWA) — hidden until the browser fires beforeinstallprompt */
+.install-btn {
+  width: auto; padding: 0 12px; gap: 6px; display: none; align-items: center;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2px;
+  color: var(--brand-ink); background: var(--brand-soft); border-color: var(--brand-soft);
+}
+.install-btn.show { display: inline-flex; }
+.install-btn:hover { border-color: var(--brand); color: var(--brand-ink); }
 
 main#app { flex: 1; padding: 30px 0 64px; }
 
@@ -463,8 +468,14 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .charts-h { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; display: flex; align-items: center; gap: 8px; }
 .charts-h .ic-svg { color: var(--brand); flex: none; }
 .charts-note { font-size: 12.5px; color: var(--ink-3); }
+.charts-empty {
+  margin: 0; padding: 16px 18px; border: 1.5px dashed var(--line); border-radius: 14px;
+  color: var(--ink-3); font-size: 13px; line-height: 1.55;
+}
 .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
-.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-1); min-width: 0; }
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-1); min-width: 0; display: flex; flex-direction: column; }
+/* when a card shares a row with a taller chart, let its content fill the height */
+.chart-card > .meters, .chart-card > .funds, .chart-card > .donut-wrap { flex: 1 1 auto; justify-content: space-evenly; }
 .chart-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .chart-head h3 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: -0.1px; }
@@ -481,8 +492,25 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .meter-top { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 5px; }
 .meter-top .l { color: var(--ink-2); font-weight: 650; }
 .meter-top .v { font-weight: 800; font-variant-numeric: tabular-nums; }
-.meter-track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.meter-track { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .meter-fill { height: 100%; border-radius: 999px; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.meter-mark {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--ink); opacity: 0.45; border-radius: 1px; pointer-events: none;
+}
+
+/* collapsed "more issue details" block */
+.kv-more { margin-top: 13px; }
+.kv-more summary {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none; list-style: none;
+  font-size: 12.5px; font-weight: 650; color: var(--brand);
+}
+.kv-more summary::-webkit-details-marker { display: none; }
+.kv-more summary::after { content: '▸'; font-size: 11px; transition: transform 0.18s ease; }
+.kv-more[open] summary::after { transform: rotate(90deg); }
+.kv-more summary:hover { text-decoration: underline; }
+.kv-more-body { margin-top: 12px; }
 
 /* issue-structure donut */
 .donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
@@ -564,6 +592,26 @@ main#app { flex: 1; padding: 30px 0 64px; }
   .filters input { width: 100%; }
   .qf-grid { grid-template-columns: 1fr 1fr; }
   .card { padding: 16px; }
+}
+
+/* ---------- desktop: charts get the space they deserve ---------- */
+@media (min-width: 861px) {
+  .charts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .chart-card { padding: 20px 22px; }
+  .chart-head { margin-bottom: 14px; }
+  .chart-head h3 { font-size: 15.5px; }
+  .chart-sub { font-size: 12.5px; }
+  .charts-h { font-size: 19px; }
+  .charts-note { font-size: 13px; }
+  .meters { gap: 15px; }
+  .funds { gap: 14px; }
+  .meter-top, .fund-head, .sub-head { font-size: 13.5px; margin-bottom: 7px; }
+  .meter-track, .fund-track, .sub-bar { height: 11px; }
+  .sub-row { margin-bottom: 16px; }
+  .donut { width: 200px; height: 200px; }
+  .donut-wrap { gap: 24px; }
+  .donut-legend { gap: 12px; }
+  .donut-leg { font-size: 13.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

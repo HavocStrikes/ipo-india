@@ -1,0 +1,20 @@
+{
+  "name": "IPO India — Live IPO Tracker",
+  "short_name": "IPO India",
+  "description": "Live Indian IPO tracker: upcoming, open and recently listed IPOs with subscription, fundamentals, valuation and a 0-100 investability score.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0d18",
+  "theme_color": "#0a0d18",
+  "lang": "en",
+  "categories": ["finance", "business"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

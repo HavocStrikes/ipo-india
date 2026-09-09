@@ -172,7 +172,7 @@ setTimeout(() => {
           'You&rsquo;re on the list!',
         ]
       : MODE === 'sparse'
-        ? ['Never miss an IPO', 'id="subForm"']
+        ? ['Never miss an IPO', 'id="subForm"', 'No charts for this IPO yet']
         : ['Never miss an IPO', 'id="subForm"', 'sub-prefs', 'Weekly digest'];
   const missing = must.filter((s) => !html.includes(s));
   const leaks = ['NaN', 'undefined'].filter((s) => html.includes(s));
@@ -180,9 +180,10 @@ setTimeout(() => {
 
   if (MODE === 'detail' && chartCards !== 4) missing.push(`chart-card count ${chartCards} !== 4`);
   if (MODE === 'sparse') {
-    // upcoming IPO with no financials/market data: charts section should not render at all
+    // upcoming IPO with no financials/market data: no chart cards, but the
+    // section must still render with the explicit empty-state note.
     if (chartCards !== 0) missing.push(`chart-card count ${chartCards} !== 0`);
-    if (html.includes('Company in charts')) missing.push('charts section should be absent');
+    if (!html.includes('No charts for this IPO yet')) missing.push('charts empty-state note missing');
   }
 
   if (missing.length || leaks.length) {
