@@ -365,6 +365,7 @@
         <div class="chips">
           <button class="chip" data-tab="open"><span class="n">${m.counts.open ?? 0}</span><span class="l">Open now</span></button>
           <button class="chip" data-tab="upcoming"><span class="n">${m.counts.upcoming ?? 0}</span><span class="l">Upcoming · 31 days</span></button>
+          <button class="chip" data-tab="closed"><span class="n">${m.counts.closed ?? 0}</span><span class="l">Closed · last 31 days</span></button>
           <button class="chip" data-tab="listed"><span class="n">${m.counts.listed ?? 0}</span><span class="l">Listed · last 31 days</span></button>
         </div>
       </section>
