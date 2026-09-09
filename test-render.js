@@ -249,6 +249,9 @@ setTimeout(() => {
       missing.push('market strip quote names missing');
     }
     // Yahoo-style change cell: solid ▲/▼ arrow + absolute change + (percent).
+    if (!strip.innerHTML.includes('class="mtile up"') || !strip.innerHTML.includes('class="mtile down"')) {
+      missing.push('market strip up/down direction classes missing');
+    }
     if (!strip.innerHTML.includes('mt-arr')) missing.push('market strip arrow span missing');
     if (!strip.innerHTML.includes('▲') || !strip.innerHTML.includes('▼')) {
       missing.push('market strip up/down arrows missing');

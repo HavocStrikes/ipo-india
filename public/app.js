@@ -258,8 +258,9 @@
       q.currency === 'INR' && Math.abs(q.price) >= 1000
         ? q.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })
         : q.price.toLocaleString('en-IN', { maximumFractionDigits: 2 });
-    // Yahoo-style change cell: solid triangle, absolute change, (percent) —
-    // e.g. "▼ -813.35 (-1.08%)" in green/red via the tile's direction class.
+    // Yahoo-style two-row tile: muted name on top; below, the price next to a
+    // tinted change pill in Yahoo's quote-header format — solid triangle +
+    // absolute change + (percent), e.g. "▼ -813.35 (-1.08%)" in green/red.
     const absTxt =
       typeof q.change === 'number'
         ? `${q.change > 0 ? '+' : ''}${q.change.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
@@ -272,8 +273,7 @@
         : q.name;
     return `<div class="mtile ${dir}" title="${esc(title)}">
         <span class="mt-name">${esc(q.name)}</span>
-        <span class="mt-price">${sym}${priceTxt}</span>
-        <span class="mt-chg"><span class="mt-arr" aria-hidden="true">${arrow}</span>${absTxt ? `<span class="mt-abs">${absTxt}</span>` : ''}${pctPart ? `<span class="mt-pct">${pctPart}</span>` : ''}</span>
+        <span class="mt-row"><span class="mt-price">${sym}${priceTxt}</span><span class="mt-chg"><span class="mt-arr" aria-hidden="true">${arrow}</span>${absTxt ? `<span class="mt-abs">${absTxt}</span>` : ''}${pctPart ? `<span class="mt-pct">${pctPart}</span>` : ''}</span></span>
       </div>`;
   }
 
