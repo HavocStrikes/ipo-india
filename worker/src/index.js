@@ -32,6 +32,7 @@ import { loadDashboardSchedule, toIpoRecord } from '../../lib/dashboard.js';
 import { computeScore } from '../../lib/scoring.js';
 import { loadDetail, mergeDetailIntoIpo } from '../../lib/detail.js';
 import { upstreamState } from '../../lib/fetcher.js';
+import { attachLiveSubscriptions } from '../../lib/livesubs.js';
 
 import {
   addSubscriber,
@@ -97,6 +98,7 @@ function summarize(ipo) {
     issuePrice: ipo.issuePrice ?? null,
     issueAmountCr: ipo.issueAmountCr ?? null,
     subscriptionX: ipo.subscriptionX ?? null,
+    liveSub: ipo.liveSub ?? null,
     listingGainPct: ipo.listingGainPct ?? (ipo.listing && ipo.listing.gainPct) ?? null,
     listingOpenPrice: ipo.listingOpenPrice ?? (ipo.listing && ipo.listing.openPrice) ?? null,
     marketPrice: ipo.marketPrice ?? (ipo.market && ipo.market.price) ?? null,
@@ -144,7 +146,7 @@ function htmlPage(body, status = 200) {
 // ---- dataset build (cron side) ---------------------------------------------
 
 /** Build the current-year dataset: JSON reports + live dashboard timetable. */
-async function buildCurrentYearDataset(env) {
+async function buildCurrentYearDataset(env, { withLiveSubs = false } = {}) {
   const y = new Date().getUTCFullYear();
   const results = await Promise.allSettled([loadYear(y), loadDashboardSchedule()]);
   const yearResult = results[0];
@@ -190,6 +192,16 @@ async function buildCurrentYearDataset(env) {
     final.push(enriched);
   }
   final.sort((a, b) => (b.openDate || '0000').localeCompare(a.openDate || '0000'));
+
+  // Live subscription ("x times subscribed so far") for currently-open issues,
+  // scraped from Chittorgarh's per-IPO subscription page. Failures are
+  // non-fatal and reported in `errors` like every other source.
+  if (withLiveSubs) {
+    await attachLiveSubscriptions(final, {
+      onError: (e) => errors.push({ source: 'live-subs', error: e }),
+    });
+  }
+
   return {
     year: y,
     fetchedAt: new Date().toISOString(),
@@ -255,7 +267,14 @@ async function refreshData(env) {
   // blocked), KEEP the last-good KV data instead of blanking the live site,
   // and reuse it for the `notable` rebuild below. The next healthy cron run
   // heals everything automatically.
-  const fresh = await buildCurrentYearDataset(env);
+  //
+  // Live-subscription budgeting: free-tier Workers cap a run at ~50 upstream
+  // subrequests. Heavy slots already spend ~30-44 (rotating deep-history year
+  // on even slots, previous-year rebuild at slot 0 of every 6th hour), so live
+  // subs are refreshed on light slots only (minutes 10-19/30-39/50-59) —
+  // ~3 refreshes per hour, at most ~20 fetches per run.
+  const heavySlot = slot % 2 === 0 || (slot === 0 && now.getUTCHours() % 6 === 0);
+  const fresh = await buildCurrentYearDataset(env, { withLiveSubs: !heavySlot });
   const prevCur = await getJson(env, `records:${y}`);
   const cur = prevCur && prevCur.ipos && prevCur.ipos.length && !fresh.ipos.length ? prevCur : fresh;
   if (cur === prevCur) {

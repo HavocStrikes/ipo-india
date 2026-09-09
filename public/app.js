@@ -469,6 +469,7 @@
           ${i.subscriptionX != null ? `<div><span class="k">Subscription</span><span class="v">${x(i.subscriptionX)}</span></div>` : ''}
           <div><span class="k">${keyDate[0]}</span><span class="v">${dateCell}</span></div>
         </div>
+        ${liveSubHTML(i)}
         <div class="card-foot">
           <span class="details-link">View details ${icon('arrow', 'dl-arrow')}</span>
         </div>
@@ -896,6 +897,35 @@
         A transparent 0–100 investability score built from five weighted pillars.</div>${bars}`;
   }
 
+  /** Groww-style "live subscription" block for currently-open issues. */
+  function liveSubHTML(i) {
+    const ls = i.liveSub;
+    if (!ls || i.status !== 'open' || ls.total == null) return '';
+    const rows = [
+      ['QIB', ls.qib, ''],
+      ['NII (HNI)', ls.nii, 'nii'],
+      ['Retail', ls.retail, 'retail'],
+    ].filter((r) => r[1] != null);
+    const max = Math.max(ls.total, ...rows.map((r) => Number(r[1]) || 0), 1);
+    return `
+      <div class="live-sub">
+        <div class="live-sub-head">
+          <span class="ls-live"><span class="ls-dot"></span>Live bidding</span>
+          <span class="ls-total">${x(ls.total)}</span>
+          <span class="ls-when">${agoS(ls.fetchedAt)}</span>
+        </div>
+        ${rows
+          .map(
+            ([label, val, cls]) => `
+          <div class="sub-row">
+            <div class="sub-head"><span class="l">${label}</span><span class="v">${x(val)}</span></div>
+            <div class="sub-bar"><div class="sub-fill ${cls}" style="width:${Math.min(100, (Number(val) / max) * 100)}%"></div></div>
+          </div>`
+          )
+          .join('')}
+      </div>`;
+  }
+
   function subHTML(rows, subMax) {
     return `${rows
       .map(
@@ -1072,11 +1102,16 @@
     const rev = i.reviews || { subscribe: 0, neutral: 0, avoid: 0 };
     const revTotal = Math.max(1, rev.subscribe + rev.neutral + rev.avoid);
     const promo = d.promoters ? promotersHTML(d.promoters, charts.flags.promoters) : '';
-    const subBody = subRows.length
-      ? subHTML(subRows, subMax)
-      : i.subscriptionX != null
-        ? detailKV([['Total subscription', x(i.subscriptionX)]])
-        : '';
+    const subBody = [
+      liveSubHTML(i),
+      subRows.length
+        ? subHTML(subRows, subMax)
+        : i.subscriptionX != null
+          ? detailKV([['Total subscription', x(i.subscriptionX)]])
+          : '',
+    ]
+      .filter(Boolean)
+      .join('');
 
     app.innerHTML = `
       <button class="back" id="backBtn">${icon('arrow')} Back to tracker</button>
@@ -1098,7 +1133,11 @@
             <div class="qf"><span class="qf-l">${listed ? 'Listed on' : 'Expected listing'}</span><span class="qf-v">${dateS(i.listingDate)}</span></div>
             <div class="qf"><span class="qf-l">Lot size</span><span class="qf-v">${d.lotSize != null ? `${numFmt(d.lotSize)} sh` : '—'}</span></div>
             <div class="qf"><span class="qf-l">Issue size</span><span class="qf-v">${i.issueAmountCr != null ? `₹${numFmt(i.issueAmountCr, 0)} Cr` : '—'}</span></div>
-            <div class="qf"><span class="qf-l">Subscription</span><span class="qf-v">${x(i.subscriptionX)}</span></div>
+            <div class="qf"><span class="qf-l">Subscription</span><span class="qf-v">${
+              i.liveSub && i.liveSub.total != null
+                ? `<span class="qf-live">${x(i.liveSub.total)}</span>`
+                : x(i.subscriptionX)
+            }</span></div>
           </div>
         </div>
         <div class="hero-score">

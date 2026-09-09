@@ -145,6 +145,13 @@ Today's date drives all windows, so the site always feels current.
 - **Per-IPO detail pages** are scraped server-side (cached 30 min) for price band,
   lot size, issue structure, objects of the issue, promoters, registrar, lead managers
   and listing-day trading stats.
+- **Live subscription for open IPOs** — Chittorgarh's per-IPO subscription page
+  (`/ipo_subscription/<slug>/<id>/`, `lib/livesubs.js`) republishes the combined
+  live bidding data from BSE and NSE (the same "x times subscribed" numbers broker
+  apps like Groww show). Parsed into `{ qib, nii, retail, total, fetchedAt }` and
+  attached as `liveSub` to open issues only; the worker refreshes it on "light"
+  cron slots (~3×/hour) to stay inside its subrequest budget, and SME issues
+  legitimately report `qib: null`.
 - **BSE India public JSON feeds** (`api.bseindia.com`) — an *independent second source*
   used to cross-check the numbers we publish (`lib/verify.js`):
   - `GetPublicIssue_par_updated` → open + forthcoming issues (BSE scrip code, dates,
@@ -302,8 +309,8 @@ Ops visibility: `GET /api/alerts/status` (no PII — counts only).
 
 | Endpoint             | Description                                             |
 | -------------------- | ------------------------------------------------------- |
-| `GET /api/ipos`      | List (windowed by default). Query: `status`, `category`, `q`, `all=1`. Each row carries `verification` when BSE has a counterpart |
-| `GET /api/ipos/:id`  | One IPO: full record + score pillars + scraped detail + BSE cross-check (`verification.mismatches` lists any disagreements) |
+| `GET /api/ipos`      | List (windowed by default). Query: `status`, `category`, `q`, `all=1`. Each row carries `verification` when BSE has a counterpart, and `liveSub` (`{ qib, nii, retail, total, fetchedAt }`) while bidding is open |
+| `GET /api/ipos/:id`  | One IPO: full record + score pillars + scraped detail + BSE cross-check (`verification.mismatches` lists any disagreements); open issues include `liveSub` |
 | `GET /api/meta`      | Freshness, per-status counts, upstream errors, BSE verify state |
 | `GET /healthz`       | Liveness probe                                          |
 | `POST /api/subscribe` | Subscribe for updates — JSON `{ email, preferences }`  |

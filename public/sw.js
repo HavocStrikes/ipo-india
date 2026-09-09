@@ -10,7 +10,7 @@
  */
 'use strict';
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 
 const SHELL_CACHE = `ipo-shell-${VERSION}`;
 const API_CACHE = `ipo-api-${VERSION}`;

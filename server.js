@@ -21,6 +21,7 @@ const { loadDashboardSchedule, toIpoRecord } = require('./lib/dashboard');
 const { computeScore } = require('./lib/scoring');
 const { loadDetail, mergeDetailIntoIpo } = require('./lib/detail');
 const { upstreamState } = require('./lib/fetcher');
+const { attachLiveSubscriptions } = require('./lib/livesubs');
 const { fetchBseData, verifyIpo, verifyState } = require('./lib/verify');
 
 const {
@@ -144,6 +145,13 @@ async function buildDataset() {
     final.push(enriched);
   }
   final.sort((a, b) => (b.openDate || '0000').localeCompare(a.openDate || '0000'));
+
+  // Live subscription ("x times subscribed so far") for currently-open issues —
+  // Chittorgarh's per-IPO subscription page (live BSE/NSE bidding data).
+  await attachLiveSubscriptions(final, {
+    onError: (e) => errors.push({ source: 'live-subs', error: e }),
+  });
+
   return { fetchedAt: new Date().toISOString(), yearsLoaded, count: final.length, errors, ipos: final };
 }
 
@@ -367,6 +375,7 @@ function summarize(ipo) {
     issuePrice: ipo.issuePrice,
     issueAmountCr: ipo.issueAmountCr,
     subscriptionX: ipo.subscriptionX,
+    liveSub: ipo.liveSub ?? null,
     listingGainPct: ipo.listing && ipo.listing.gainPct,
     marketPrice: ipo.market && ipo.market.price,
     pePost: ipo.kpi && ipo.kpi.pePost,
