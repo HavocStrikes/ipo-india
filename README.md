@@ -230,12 +230,29 @@ issues are skipped entirely**, so daily email quotas are never wasted.
 | 📡 **Open**      | A **Mainboard** IPO's status flips to *open* (≤1 day old)          |
 | 📊 **Listed**    | A **Mainboard** IPO lists, with issue vs listing price (+/-%)      |
 
-Each email carries the company name with a **MAINBOARD** badge, price band &
-issue size, the 0–100 investability score + verdict, the full 5-pillar score
-breakdown (Demand, Fundamentals, Valuation, Performance, Sentiment), key
-metrics (P/E post-issue, RoNW, EPS pre-IPO), a direct **View Full Analysis**
-CTA button linking to `${SITE_URL}/ipo/${id}`, and a signed one-click
-unsubscribe footer.
+Each alert is a **neutral, informational analysis** — it states the facts of an
+issue and why the model scores it the way it does, and explicitly does *not*
+advise readers to buy or apply. In emails:
+
+- **Issue at a glance** — price band, face value, lot size, estimated minimum
+  investment for one lot, issue size, exchanges, and the full date table
+  (open / close / allotment / listing).
+- **Investability score** — 0–100 score, verdict and model confidence.
+- **Score breakdown** — all five pillars (Demand, Fundamentals, Valuation,
+  Performance, Sentiment) *with the rationale note for each* (e.g.
+  *"RoNW 47.17%, PAT margin 9.78%"*), the reason the score reads the way it does.
+- **Financial & valuation snapshot** — revenue, PAT, net worth, post-issue P/E,
+  RoNW, PAT margin and EPS (pre/post), pulled from the full `records:<year>`
+  dataset (not the stripped list summaries).
+- **Listing-day outcome** (listed emails) — listing price vs issue price, gain
+  or loss %, and the subscription multiple.
+- A **Read the full analysis →** button to `${SITE_URL}/ipo/${id}`, a signed
+  one-click unsubscribe link, and a footer disclaiming that the message is
+  informational and not investment advice.
+
+Each event IPO is also enriched with the scraped detail page (price band,
+lot size, timetable) via the shared `detail:<id>` KV cache, so the pricing and
+lot-size figures in emails are real.
 
 **Strict category filtering** — `ipo.category.toLowerCase() === 'mainboard'`
 gates every step (event detection, email build, dispatch). SME issues never
