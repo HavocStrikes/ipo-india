@@ -9,7 +9,7 @@ issues listed in the last month**, each with a full details page and a transpare
 
 - Premium fintech design: **dark mode by default** (+ light mode toggle, remembered + respects system preference), Inter + Space Grotesk type system, SVG icon set, glassy sticky header, animated gradient hero, sliding-pill tabs, gradient score rings with tick marks, staggered card entrances, and full `prefers-reduced-motion` support.
 - **`/`** — home hub: stat chips, tabs, search, Mainboard/SME filter, sorting, score-ring cards.
-- **`/ipo/:id`** — dedicated details page: hero with quick-fact tiles + copy-link, verdict + glowing score ring, animated timeline (open → close → allotment → refund → credit → listing), 5-pillar score breakdown, subscription bars, financials, valuation ratios, listing-day trading, issue objects, promoters, anchors, reviews and registrar/lead managers.
+- **`/ipo/:id`** — dedicated details page: hero with quick-fact tiles + copy-link, glowing score ring, animated timeline (open → close → allotment → refund → credit → listing), 5-pillar score breakdown, subscription bars, financials, valuation ratios, listing-day trading, issue objects, promoters, anchors, reviews and registrar/lead managers.
 - **"Company in charts"** — every details page opens with a visual section (hand-rolled SVG, no chart library): a financials bar chart (revenue / EBITDA / profit / net worth / borrowings), profitability & returns meter bars, a price-journey line chart with the 52-week range shaded, and an issue-structure donut (fresh vs offer-for-sale) or use-of-funds bars. Chart cards render only when the data exists — IPOs that haven't listed yet simply show no chart section.
 - **Subscribe** — an email capture card on the home and IPO pages: visitors pick what they want (upcoming IPO alerts, weekly digest, deep-dive analysis) and submit via `POST /api/subscribe`. Emails are stored server-side in `data/subscribers.jsonl` (git-ignored), with server-side validation, per-IP rate limiting (8/hour), a branded **welcome/confirmation email** with a signed one-click unsubscribe link (when a mail provider is configured — see *Email delivery* below), a public subscriber-count endpoint for social proof, and a `send-update.js` CLI to broadcast future updates.
 
@@ -68,7 +68,7 @@ issues are never emailed**, so your provider quota isn't wasted:
 | 🔔 Open | a Mainboard IPO's bidding opens (score + 5-pillar breakdown) |
 | 📊 Listed | a Mainboard IPO lists (with listing open price and gain%) |
 
-Each email carries the 0–100 score, the verdict, the 5-pillar breakdown, the
+Each email carries the 0–100 score, the 5-pillar breakdown, the
 price band and issue size, and a CTA straight to the IPO detail page
 (`${SITE_URL}/ipo/:id`). Subscribers pick which emails they want with the
 preference checkboxes on the subscribe form; every message has a signed
@@ -152,8 +152,8 @@ instant) and the frontend re-pulls every 5 minutes. A green "live" pill shows fr
 ## The score
 
 `Score = Demand (25) + Fundamentals (25) + Valuation (20) + Performance (15) + Sentiment (15)`
-with an SME risk haircut (×0.88). Verdicts: `Strong Buy ≥ 75`, `Apply ≥ 60`,
-`Hold / Watch ≥ 45`, `Avoid ≥ 30`, else `Strong Avoid`. Every pillar degrades gracefully
+with an SME risk haircut (×0.88). Scores are informational only — the site and
+its emails never suggest whether to apply, hold or avoid. Every pillar degrades gracefully
 when data is missing, and each IPO reports a `confidence` level (high/medium/low) based on
 how many pillars had real inputs.
 
@@ -237,7 +237,7 @@ advise readers to buy or apply. In emails:
 - **Issue at a glance** — price band, face value, lot size, estimated minimum
   investment for one lot, issue size, exchanges, and the full date table
   (open / close / allotment / listing).
-- **Investability score** — 0–100 score, verdict and model confidence.
+- **Investability score** — 0–100 score and model confidence (never advice).
 - **Score breakdown** — all five pillars (Demand, Fundamentals, Valuation,
   Performance, Sentiment) *with the rationale note for each* (e.g.
   *"RoNW 47.17%, PAT margin 9.78%"*), the reason the score reads the way it does.

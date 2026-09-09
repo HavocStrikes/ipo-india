@@ -354,7 +354,6 @@ function summarize(ipo) {
     ronw: ipo.kpi && (ipo.kpi.ronw ?? ipo.kpi.roe),
     score: {
       score: ipo.score.score,
-      verdict: ipo.score.verdict,
       tone: ipo.score.tone,
       confidence: ipo.score.confidence,
     },

@@ -95,15 +95,13 @@ function minTicket(ipo) {
   return { lot, amount };
 }
 
-/** "53.5 / 100" plus verdict and confidence — with a coloured tone. */
+/** "53.5 / 100" plus model confidence — with a coloured tone (no advice). */
 function scoreCard(score) {
   const val = score.score != null ? fmt(score.score) : '—';
-  const verdict = score.verdict || '—';
   const conf = score.confidence || null;
   const color = score.tone === 'positive' ? '#16a34a' : score.tone === 'negative' ? '#dc2626' : '#b45309';
   let head = `<p style="margin:0 0 6px;font-size:13px;color:#4a546e">Investability Score</p>
-<p style="margin:0 0 6px;font-size:34px;font-weight:bold;line-height:1;color:${color}">${val}<span style="font-size:15px;color:#8a94ad"> / 100</span></p>
-<p style="margin:0 0 4px;font-size:15px;font-weight:bold;color:${color}">${escapeHtml(verdict)}</p>`;
+<p style="margin:0 0 6px;font-size:34px;font-weight:bold;line-height:1;color:${color}">${val}<span style="font-size:15px;color:#8a94ad"> / 100</span></p>`;
   if (conf) head += `<p style="margin:4px 0 0;font-size:12px;color:#8a94ad">Model confidence: ${escapeHtml(conf)}</p>`;
   return head;
 }
@@ -240,13 +238,11 @@ function pillarHighlight(ipo) {
 function summaryText(type, ipo) {
   const score = ipo.score || {};
   const sc = score.score != null ? fmt(score.score) : null;
-  const verdict = score.verdict || null;
   const conf = score.confidence || null;
   const sentences = [];
 
   const scoreClause = (() => {
     let s = 'On our five-pillar investability model, the issue scored ' + sc + ' out of 100';
-    if (verdict) s += ' (' + verdict + ')';
     if (conf) s += ', with ' + conf + ' confidence';
     return s + '.';
   })();
@@ -362,7 +358,7 @@ function buildEmail(type, ipo, site, unsubUrl) {
     const lo = listingOutcomePlain(ipo);
     if (lo) text += 'Listing outcome:\n' + lo + '\n\n';
   }
-  text += 'Score: ' + (score.score != null ? fmt(score.score) + '/100' : '—') + (score.verdict ? ' (' + score.verdict + ')' : '') + (score.confidence ? ', confidence: ' + score.confidence : '') + '\n\n';
+  text += 'Score: ' + (score.score != null ? fmt(score.score) + '/100' : '—') + (score.confidence ? ', confidence: ' + score.confidence : '') + '\n\n';
   text += 'Score breakdown:\n' + pillarsPlain(score) + '\n\n';
   const fins = financialsPlain(ipo);
   if (fins) text += 'Financials:\n' + fins + '\n\n';

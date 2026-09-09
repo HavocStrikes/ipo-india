@@ -393,7 +393,6 @@
         </div>
         <div class="card-foot">
           <span class="details-link">View details ${icon('arrow', 'dl-arrow')}</span>
-          <span class="verdict" style="color:${toneColor(tone)}">${esc(i.score ? i.score.verdict : '—')}</span>
         </div>
       </article>`;
   }
@@ -928,8 +927,7 @@
         <div class="hero-score">
           ${scoreRing(sc.score || 0, sc.tone || 'neutral', 84)}
           <div class="hero-side">
-            <div class="verdict-big" style="color:${toneColor(sc.tone || 'neutral')}">${esc(sc.verdict || '—')}</div>
-            <div class="verdict-meta">${sc.score || 0} / 100 investability</div>
+            <div class="verdict-meta">investability score</div>
             <span class="conf-pill">${esc(sc.confidence || 'low')} confidence</span>
           </div>
         </div>

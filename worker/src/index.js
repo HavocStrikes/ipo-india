@@ -99,7 +99,7 @@ function summarize(ipo) {
     pePost: ipo.pePost ?? (ipo.kpi && ipo.kpi.pePost) ?? null,
     ronw: ipo.ronw ?? (ipo.kpi && (ipo.kpi.ronw ?? ipo.kpi.roe)) ?? null,
     score: ipo.score
-      ? { score: ipo.score.score, verdict: ipo.score.verdict, tone: ipo.score.tone, confidence: ipo.score.confidence, pillars: ipo.score.pillars || null }
+      ? { score: ipo.score.score, tone: ipo.score.tone, confidence: ipo.score.confidence, pillars: ipo.score.pillars || null }
       : null,
     detailUrl: ipo.detailUrl ?? null,
     nseSymbol: ipo.nseSymbol ?? null,
