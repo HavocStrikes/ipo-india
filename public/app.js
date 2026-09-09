@@ -80,7 +80,7 @@
   };
 
   /* ---------------- state + router ---------------- */
-  const state = { tab: 'upcoming', category: 'all', q: '', sort: 'recent', all: false, meta: null, shown: 12 };
+  const state = { tab: 'upcoming', category: 'mainboard', q: '', sort: 'recent', all: false, meta: null, shown: 12 }; // mainboard is the default view (most investors) — visitors can switch to SME or All via the filter
 
   function go(url) {
     history.pushState({}, '', SITE_BASE === '/' ? url : SITE_BASE.replace(/\/$/, '') + url);
