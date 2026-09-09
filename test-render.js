@@ -239,9 +239,15 @@ setTimeout(() => {
   if (!strip) missing.push('market strip element missing from shim');
   else {
     if (strip.hidden) missing.push('market strip must be visible after a good snapshot');
-    const tiles = (strip.innerHTML.match(/class="mtile /g) || []).length;
+    // Real tiles vs the aria-hidden duplicates that power the seamless marquee.
+    const tileAttrs = strip.innerHTML.match(/class="mtile [^"]*"/g) || [];
+    const tiles = tileAttrs.filter((c) => !c.includes('mt-dup')).length;
+    const dups = tileAttrs.filter((c) => c.includes('mt-dup')).length;
     if (tiles !== MARKETS_SNAPSHOT.quotes.length) {
       missing.push(`market strip tile count ${tiles} !== ${MARKETS_SNAPSHOT.quotes.length}`);
+    }
+    if (dups !== MARKETS_SNAPSHOT.quotes.length) {
+      missing.push(`market strip marquee duplicate tiles ${dups} !== ${MARKETS_SNAPSHOT.quotes.length}`);
     }
     if (!/Market (open|closed)/.test(strip.innerHTML)) missing.push('market strip open/closed pill missing');
     if (!strip.innerHTML.includes('as of')) missing.push('market strip as-of stamp missing');

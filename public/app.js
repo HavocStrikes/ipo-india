@@ -250,7 +250,7 @@
     return day >= 1 && day <= 5 && mins >= 555 && mins < 930;
   }
 
-  function marketTile(q) {
+  function marketTile(q, dup = false) {
     const sym = CURRENCY_SYMBOL[q.currency] || '';
     const dir = q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
     const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '·';
@@ -271,7 +271,7 @@
     const prevTxt = q.prevClose != null ? sym + q.prevClose.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '';
     const extra = [absTxt && `today ${absTxt}`, prevTxt && `prev close ${prevTxt}`].filter(Boolean).join(' · ');
     const title = extra ? `${q.name} — ${extra}` : q.name;
-    return `<div class="mtile ${dir}" title="${esc(title)}">
+    return `<div class="mtile ${dir}${dup ? ' mt-dup' : ''}"${dup ? ' aria-hidden="true"' : ''} title="${esc(title)}">
         <span class="mt-name">${esc(q.name)}</span>
         <span class="mt-row"><span class="mt-price">${sym}${priceTxt}</span>${pctPart ? `<span class="mt-chg"><span class="mt-arr" aria-hidden="true">${arrow}</span><span class="mt-pct">${pctPart}</span></span>` : ''}</span>
       </div>`;
@@ -290,12 +290,33 @@
       ? new Date(snap.fetchedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       : '';
     const live = marketOpenIST();
+    // The tile row is duplicated (the second copy is aria-hidden) so the CSS
+    // marquee on small screens can loop seamlessly; on wide screens the
+    // duplicates are display:none and the row is the same static strip as before.
+    const tiles = quotes.map((q) => marketTile(q)).join('');
+    const tilesDup = quotes.map((q) => marketTile(q, true)).join('');
     el.innerHTML =
       `<div class="wrap mt-inner">` +
       `<span class="mt-tag${live ? ' live' : ''}"><span class="mt-dot"></span>${live ? 'Market open' : 'Market closed'}</span>` +
-      quotes.map(marketTile).join('') +
+      `<div class="mt-scroll"><div class="mt-track">${tiles}${tilesDup}</div></div>` +
       (asOf ? `<span class="mt-asof">as of ${asOf} IST</span>` : '') +
       `</div>`;
+    // Keep the ticker pace constant regardless of how many quotes came back
+    // (~36px/s), and skip the animation entirely when one set already fits.
+    const track = el.querySelector('.mt-track');
+    if (track) {
+      // Layout reads are guarded: test DOM shims (and edge browsers) may not
+      // implement scrollWidth/clientWidth — in that case just use the default pace.
+      const half = (track.scrollWidth || 0) / 2;
+      const box = (track.parentElement && track.parentElement.clientWidth) || 0;
+      if (half > 0 && box > 0) {
+        if (half <= box) track.style.animation = 'none';
+        else track.style.animationDuration = `${Math.min(40, Math.max(12, Math.round(half / 36)))}s`;
+      }
+    }
+    // Press-and-hold pauses the marquee (touch never fires :active on plain divs).
+    el.ontouchstart = () => el.querySelector('.mt-inner')?.classList.add('mt-hold');
+    el.ontouchend = el.ontouchcancel = () => el.querySelector('.mt-inner')?.classList.remove('mt-hold');
   }
 
   function loadMarkets() {

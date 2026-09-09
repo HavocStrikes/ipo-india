@@ -698,6 +698,13 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .market-strip::-webkit-scrollbar { display: none; }
 .market-strip[hidden] { display: none; }
 .mt-inner { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-width: max-content; }
+/* Tile row wrapper: clips the (duplicated) tiles; the marquee animates .mt-track.
+   margin-right (not gap) spaces tiles inside the track so translateX(-50%) is
+   pixel-exact for a seamless loop. */
+.mt-scroll { display: flex; align-items: center; overflow: hidden; flex: 0 1 auto; min-width: 0; }
+.mt-track { display: flex; align-items: center; width: max-content; }
+.mt-track .mtile { margin-right: 10px; }
+.mt-dup { display: none; }
 .mt-tag {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 11.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
@@ -732,3 +739,25 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .mtile.down .mt-chg { color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, transparent); }
 .mtile.flat .mt-chg { color: var(--ink-3); background: color-mix(in srgb, var(--ink-3) 16%, transparent); }
 .mt-asof { font-size: 11px; color: var(--ink-3); white-space: nowrap; padding-left: 6px; }
+
+/* ---------- market strip: auto-scrolling ticker on small screens ---------- */
+@keyframes mt-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (max-width: 860px) {
+  .market-strip { overflow: hidden; }
+  .mt-inner { min-width: 0; }
+  .mt-scroll {
+    flex: 1;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  }
+  .mt-dup { display: inline-flex; }
+  .mt-track { animation: mt-marquee linear infinite; will-change: transform; }
+  .mt-asof { display: none; } /* reclaim width on phones — the header's "Updated" stamp carries freshness */
+  .mt-inner.mt-hold .mt-track,
+  .mt-inner:active .mt-track { animation-play-state: paused; }
+}
+/* Reduced motion: no marquee — fall back to a plain swipeable row. */
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .market-strip { overflow-x: auto; }
+  .mt-inner { min-width: max-content; }
+}
