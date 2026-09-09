@@ -625,6 +625,7 @@ const server = http.createServer(async (req, res) => {
       return sendFile(res, path.join(PUBLIC_DIR, 'index.html'));
     }
     if (p === '/app.js') return sendFile(res, path.join(PUBLIC_DIR, 'app.js'));
+    if (p === '/config.js') return sendFile(res, path.join(PUBLIC_DIR, 'config.js'));
     if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'));
     if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'));
     if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'));

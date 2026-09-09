@@ -117,6 +117,18 @@ const META = {
   total: 1, counts: { open: 0, upcoming: 1, closed: 0, listed: 1 }, errors: [], cache: {},
 };
 
+/* Market strip snapshot — boot() always calls loadMarkets(), so every mode
+ * exercises renderMarkets() against this (regression: a bad ternary in the
+ * quote filter once made it throw and the strip silently stayed hidden). */
+const MARKETS_SNAPSHOT = {
+  fetchedAt: TS,
+  quotes: [
+    { symbol: '^BSESN', name: 'Sensex', currency: 'INR', price: 74764.23, prevClose: 75577.58, change: -813.35, changePct: -1.08, ts: TS },
+    { symbol: 'GC=F', name: 'Gold (COMEX)', currency: 'USD', price: 4464, prevClose: 4439, change: 25, changePct: 0.56, ts: TS },
+  ],
+  errors: [],
+};
+
 /* ---- minimal DOM shim ---- */
 const els = new Map();
 function getEl(sel) {
@@ -174,6 +186,7 @@ global.fetch = (url) => {
   else if (u.startsWith('/api/ipos')) {
     data = { fetchedAt: TS, yearsLoaded: [2026, 2025], windowDays: 31, curated: true, total: 1, returned: 1, errors: [], ipos: [SUMMARY] };
   } else if (u === '/api/subscribers/count') data = { count: 128 };
+  else if (u === '/api/markets') data = MARKETS_SNAPSHOT;
   return Promise.resolve({ ok: true, status: 200, json: async () => data });
 };
 
@@ -219,6 +232,23 @@ setTimeout(() => {
     }
   } else if (staleNote && staleNote.innerHTML) {
     missing.push('stale banner must be hidden for fresh data');
+  }
+
+  // Market strip: boot loads /api/markets and must reveal + fill the strip.
+  const strip = els.get('#marketStrip');
+  if (!strip) missing.push('market strip element missing from shim');
+  else {
+    if (strip.hidden) missing.push('market strip must be visible after a good snapshot');
+    const tiles = (strip.innerHTML.match(/class="mtile /g) || []).length;
+    if (tiles !== MARKETS_SNAPSHOT.quotes.length) {
+      missing.push(`market strip tile count ${tiles} !== ${MARKETS_SNAPSHOT.quotes.length}`);
+    }
+    if (!/Market (open|closed)/.test(strip.innerHTML)) missing.push('market strip open/closed pill missing');
+    if (!strip.innerHTML.includes('as of')) missing.push('market strip as-of stamp missing');
+    if (!strip.innerHTML.includes('Sensex') || !strip.innerHTML.includes('Gold')) {
+      missing.push('market strip quote names missing');
+    }
+    if (/\bNaN\b|\bundefined\b/.test(strip.innerHTML)) missing.push('market strip has NaN/undefined leak');
   }
 
   if (DETAILISH && chartCards !== 5) missing.push(`chart-card count ${chartCards} !== 5`);

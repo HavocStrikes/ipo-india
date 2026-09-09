@@ -272,7 +272,7 @@
   function renderMarkets(snap) {
     const el = $('#marketStrip');
     if (!el) return;
-    const quotes = ((snap && Array.isArray(snap.quotes)) || []).filter((q) => q && typeof q.price === 'number');
+    const quotes = (snap && Array.isArray(snap.quotes) ? snap.quotes : []).filter((q) => q && typeof q.price === 'number');
     if (!quotes.length) {
       el.hidden = true;
       return;
@@ -293,8 +293,10 @@
   function loadMarkets() {
     api('/api/markets')
       .then(renderMarkets)
-      .catch(() => {
-        /* the strip is a nice-to-have — a failure keeps the last render */
+      .catch((err) => {
+        // the strip is a nice-to-have — a failure keeps the last render, but
+        // stay visible in the console so render bugs can't hide silently.
+        console.warn('[markets]', err && err.message);
       });
   }
 
