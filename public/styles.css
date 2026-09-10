@@ -413,7 +413,7 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .qf-l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-3); font-weight: 700; }
 .qf-v { font-size: 13.5px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--ink); }
 
-.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; } /* start: panels keep natural height — no stretched blank holes */
 .detail-grid .full { grid-column: 1 / -1; }
 .panel {
   position: relative;
@@ -434,16 +434,18 @@ main#app { flex: 1; padding: 30px 0 64px; }
 .kv .v.bold { font-weight: 800; }
 
 /* ---------- timeline ---------- */
-.timeline { display: flex; flex-direction: column; }
-.tl-item { display: flex; gap: 13px; position: relative; padding-bottom: 16px; }
-.tl-item:last-child { padding-bottom: 0; }
-.tl-item::before { content: ''; position: absolute; left: 5.5px; top: 19px; bottom: -3px; width: 2px; background: var(--border); border-radius: 2px; }
+/* Desktop: full-width horizontal stepper (the panel spans both grid columns).
+ * Each item draws the connector from its own dot to the next item's dot. */
+.timeline { display: flex; flex-direction: row; }
+.tl-item { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 18px; }
+.tl-item:last-child { padding-right: 0; }
+.tl-item::before { content: ''; position: absolute; left: 6px; right: -6px; top: 6px; height: 2px; background: var(--border); border-radius: 2px; }
 .tl-item:last-child::before { display: none; }
-.tl-dot { width: 13px; height: 13px; border-radius: 50%; border: 3px solid var(--brand); background: var(--surface); flex: none; margin-top: 3px; position: relative; z-index: 1; }
+.tl-dot { width: 13px; height: 13px; border-radius: 50%; border: 3px solid var(--brand); background: var(--surface); flex: none; position: relative; z-index: 1; }
 .tl-item.done .tl-dot { background: var(--brand); border-color: var(--brand); }
 .tl-item.next .tl-dot { border-color: var(--brand-2); background: var(--brand-2); box-shadow: 0 0 0 4px var(--brand-soft); }
 .tl-item.today .tl-dot { background: var(--brand-2); border-color: var(--brand-2); box-shadow: 0 0 0 4px var(--brand-soft); }
-.tl-body { flex: 1; padding-top: 1px; }
+.tl-body { flex: none; padding-top: 1px; }
 .tl-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-3); font-weight: 700; }
 .tl-date { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .tl-item.next .tl-date { color: var(--brand-ink); }
@@ -486,6 +488,10 @@ main#app { flex: 1; padding: 30px 0 64px; }
 }
 .ls-total { margin-left: auto; font-weight: 800; font-size: 17px; }
 .ls-when { font-size: 11px; opacity: .6; white-space: nowrap; }
+/* Waiting state: bidding is live but the exchanges haven't published numbers yet. */
+.live-sub.waiting { border-style: dashed; }
+.ls-wait { margin: 2px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); }
+.ls-wait b { color: var(--ink); }
 .qf-live { color: var(--brand); }
 
 /* ---------- score pillars ---------- */
@@ -645,6 +651,13 @@ main#app { flex: 1; padding: 30px 0 64px; }
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
   .detail-grid { grid-template-columns: 1fr; }
+  /* Timeline returns to the vertical list on phones (full-width stepper is too cramped). */
+  .timeline { flex-direction: column; }
+  .tl-item { flex: none; flex-direction: row; gap: 13px; padding-right: 0; padding-bottom: 16px; }
+  .tl-item:last-child { padding-bottom: 0; }
+  .tl-item::before { left: 5.5px; right: auto; top: 19px; bottom: -3px; width: 2px; height: auto; }
+  .tl-dot { margin-top: 3px; }
+  .tl-body { flex: 1; }
   .cards { grid-template-columns: repeat(auto-fill, minmax(262px, 1fr)); }
   .filters { width: 100%; }
   .filters input { flex: 1; }

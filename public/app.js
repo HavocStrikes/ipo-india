@@ -1036,6 +1036,23 @@
       </div>`;
   }
 
+  /** Waiting-state sibling of liveSubHTML: an open issue whose subscription
+   *  numbers haven't been published yet keeps its "Subscription demand"
+   *  section as an explanatory status card instead of vanishing (which used
+   *  to leave a hole in the detail grid). */
+  function liveSubWaitingHTML(i) {
+    const closes = i.closeDate ? `${dateS(i.closeDate)} · ${rel(i.closeDate)}` : '';
+    return `
+      <div class="live-sub waiting">
+        <div class="live-sub-head">
+          <span class="ls-live"><span class="ls-dot"></span>Live bidding</span>
+          <span class="ls-total">—</span>
+          <span class="ls-when">bidding in progress</span>
+        </div>
+        <p class="ls-wait">Subscription numbers appear here as soon as the exchanges publish them — usually within a few hours of bidding opening.${closes ? ` Bids close <b>${esc(closes)}</b>.` : ''}</p>
+      </div>`;
+  }
+
   function subHTML(rows, subMax) {
     return `${rows
       .map(
@@ -1222,6 +1239,9 @@
     ]
       .filter(Boolean)
       .join('');
+    // Open issue with no bidding numbers yet: keep the section on the page as
+    // a status card instead of dropping it and leaving a hole in the grid.
+    const subPanelBody = subBody || (i.status === 'open' ? liveSubWaitingHTML(i) : '');
 
     app.innerHTML = `
       <button class="back" id="backBtn">${icon('arrow')} Back to tracker</button>
@@ -1266,14 +1286,14 @@
 
       <div class="detail-grid">
         ${panel(icon('tag'), 'Issue details', issueBody)}
-        ${panel(icon('calendar'), 'IPO timeline', timelineHTML(timelineItems(i)))}
-        ${panel(icon('chart'), 'Why this score', scoreBreakdown(sc), 'full')}
-        ${panel(icon('fire'), 'Subscription demand', subBody, i.subscriptionX != null ? '' : 'full')}
-        ${charts.flags.finBars ? '' : panel(icon('coin'), 'Financials', detailKV(finRows))}
         ${panel(icon('scale'), 'Valuation &amp; ratios', detailKV(valRows))}
+        ${panel(icon('chart'), 'Why this score', scoreBreakdown(sc), 'full')}
+        ${panel(icon('calendar'), 'IPO timeline', timelineHTML(timelineItems(i)), 'full')}
+        ${subPanelBody ? panel(icon('fire'), 'Subscription demand', subPanelBody) : ''}
+        ${promo ? panel(icon('users'), 'Promoters', promo) : ''}
+        ${charts.flags.finBars ? '' : panel(icon('coin'), 'Financials', detailKV(finRows))}
         ${listed || (i.market && i.market.price != null) ? panel(icon('spark'), 'Market & listing performance', perfHTML(i, d.listingDayTrading || {}), 'full') : ''}
         ${d.objects && d.objects.length && !charts.flags.funds ? panel(icon('target'), `Issue objects (${d.objects.length})`, objectsHTML(d.objects)) : ''}
-        ${promo ? panel(icon('users'), 'Promoters', promo) : ''}
         ${anchorsHTML(i) ? panel(icon('bank'), 'Anchor investors', anchorsHTML(i)) : ''}
         ${panel(icon('star'), 'Community & analyst reviews', reviewsHTML(rev, revTotal))}
         ${panel(icon('building'), 'Registrar & lead managers', peopleHTML(d, i.detailUrl))}
