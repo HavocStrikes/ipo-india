@@ -10,7 +10,7 @@
  */
 'use strict';
 
-const VERSION = 'v22';
+const VERSION = 'v23';
 
 const SHELL_CACHE = `ipo-shell-${VERSION}`;
 const API_CACHE = `ipo-api-${VERSION}`;
@@ -23,6 +23,8 @@ self.addEventListener('install', (event) => {
     `${base}app.js`,
     `${base}config.js`,
     `${base}manifest.webmanifest`,
+    `${base}favicon.png`,
+    `${base}icons/logo-mark.png`,
     `${base}icons/icon-192.png`,
     `${base}icons/icon-512.png`,
   ];

@@ -628,6 +628,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/config.js') return sendFile(res, path.join(PUBLIC_DIR, 'config.js'));
     if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'));
     if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'));
+    if (p === '/favicon.png') return sendFile(res, path.join(PUBLIC_DIR, 'favicon.png'));
     if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'));
     if (p.startsWith('/icons/')) {
       // PWA icons — plain filenames only (the regex blocks ../ traversal).
