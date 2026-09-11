@@ -261,25 +261,20 @@ issues are skipped entirely**, so daily email quotas are never wasted.
 | 📡 **Open**      | A **Mainboard** IPO's status flips to *open* (≤1 day old)          |
 | 📊 **Listed**    | A **Mainboard** IPO lists, with issue vs listing price (+/-%)      |
 
-Each alert is a **neutral, informational analysis** — it states the facts of an
-issue and why the model scores it the way it does, and explicitly does *not*
-advise readers to buy or apply. In emails:
+Each alert is **deliberately short** — a glance, not a report. It is neutral
+information and explicitly does *not* advise readers to buy or apply. In emails:
 
-- **Issue at a glance** — price band, face value, lot size, estimated minimum
-  investment for one lot, issue size, exchanges, and the full date table
-  (open / close / allotment / listing).
-- **Investability score** — 0–100 score and model confidence (never advice).
-- **Score breakdown** — all five pillars (Demand, Fundamentals, Valuation,
-  Performance, Sentiment) *with the rationale note for each* (e.g.
-  *"RoNW 47.17%, PAT margin 9.78%"*), the reason the score reads the way it does.
-- **Financial & valuation snapshot** — revenue, PAT, net worth, post-issue P/E,
-  RoNW, PAT margin and EPS (pre/post), pulled from the full `records:<year>`
-  dataset (not the stripped list summaries).
-- **Listing-day outcome** (listed emails) — listing price vs issue price, gain
-  or loss %, and the subscription multiple.
-- A **Read the full analysis →** button to `${SITE_URL}/ipo/${id}`, a signed
-  one-click unsubscribe link, and a footer disclaiming that the message is
-  informational and not investment advice.
+- **Two-sentence summary** — what happened (opened / listed) and when.
+- **Date chips** (open emails) — Opens and Closes, the two dates that drive the
+  apply decision, plus listing day when known.
+- **Listing chips** (listed emails) — open price vs issue price, the +/-% move
+  on listing, and the subscription multiple.
+- **Key numbers** — price band, lot size, estimated minimum investment for one
+  lot and issue size, as compact fixed-width chips that don't reflow on phones.
+- A **View the full analysis →** button to `${SITE_URL}/ipo/${id}` — the
+  investability score, its pillar-by-pillar rationale and the financials live
+  on the site, not in the email — plus a signed one-click unsubscribe link and
+  a footer disclaiming that the message is informational and not advice.
 
 Each event IPO is also enriched with the scraped detail page (price band,
 lot size, timetable) via the shared `detail:<id>` KV cache, so the pricing and
