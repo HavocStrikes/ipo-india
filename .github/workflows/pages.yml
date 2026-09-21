@@ -37,6 +37,8 @@ jobs:
             echo "WARNING: repo variable IPO_API_BASE is not set — the frontend"
             echo "will call same-origin /api, which 404s on Pages."
           fi
+          # Replace %BASE% placeholder with GitHub Pages project base path
+          sed -i 's|%BASE%|/ipo-india/|g' public/index.html
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

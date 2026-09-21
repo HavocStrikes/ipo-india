@@ -16,6 +16,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { TTLCache } = require('./lib/cache');
 const { loadYear, deriveStatus } = require('./lib/normalize');
 const { loadDashboardSchedule, toIpoRecord } = require('./lib/dashboard');
@@ -82,6 +83,15 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  // Add missing MIME types
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf'
+};
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -360,18 +370,116 @@ function json(res, code, data) {
   res.end(body);
 }
 
-function sendFile(res, filePath) {
+function sendFile(res, filePath, opts = {}) {
   fs.readFile(filePath, (err, buf) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not found');
       return;
     }
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
-    });
-    res.end(buf);
+
+    const ext = path.extname(filePath);
+    const contentType = MIME[ext] || 'application/octet-stream';
+    const acceptEncoding = opts.acceptEncoding || 'identity';
+
+    // Determine if we should compress
+    const isText = ['text/html', 'text/css', 'text/javascript', 'application/json', 'application/manifest+json']
+      .some(t => contentType.includes(t));
+    
+    // Try brotli first (better compression), fall back to gzip
+    let useBrotli = false;
+    if (isText && acceptEncoding.includes('br') && buf.length > 1024) {
+      // Prefer brotli if client supports it
+      useBrotli = true;
+    }
+    
+    if (isText && (acceptEncoding.includes('gzip') || acceptEncoding.includes('br')) && buf.length > 1024) {
+      const useBrotliFinal = useBrotli && acceptEncoding.includes('br');
+      const compressFn = useBrotliFinal ? zlib.brotliCompress : zlib.gzip;
+      const encoding = useBrotliFinal ? 'br' : 'gzip';
+      
+      compressFn(buf, (gzErr, compressed) => {
+        if (gzErr || compressed.length >= buf.length) {
+          // Compression failed or produced larger output, serve uncompressed
+          serveUncompressed(res, buf, contentType);
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Encoding': encoding,
+          'Content-Length': compressed.length,
+          'Cache-Control': opts.cache || 'public, max-age=3600',
+          'Vary': 'Accept-Encoding',
+        });
+        res.end(compressed);
+      });
+    } else {
+      serveUncompressed(res, buf, contentType);
+    }
+    
+    function serveUncompressed(res, buf, contentType) {
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': buf.length,
+        'Cache-Control': opts.cache || 'public, max-age=3600',
+      });
+      res.end(buf);
+    }
+  });
+}
+
+// Serve index.html with base path replacement for GitHub Pages support
+function sendIndexHtml(res, req) {
+  const filePath = path.join(PUBLIC_DIR, 'index.html');
+  fs.readFile(filePath, (err, buf) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+      return;
+    }
+    
+    // Determine base path from Host header
+    let base = '/';
+    const host = req.headers.host || '';
+    const isGitHubPages = host.includes('github.io') || host.includes('127.0.0.1');
+    if (host.includes('ipo-india')) {
+      base = '/ipo-india/';
+    }
+    
+    // Replace %BASE% placeholder
+    let html = buf.toString('utf8').replace(/%BASE%/g, base);
+    buf = Buffer.from(html, 'utf8');
+    
+    // Send with gzip if supported
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    if (acceptEncoding.includes('gzip') && buf.length > 1024) {
+      zlib.gzip(buf, (gzErr, gzipped) => {
+        if (gzErr || gzipped.length >= buf.length) {
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': buf.length,
+            'Cache-Control': 'no-cache',
+          });
+          res.end(buf);
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Encoding': 'gzip',
+          'Content-Length': gzipped.length,
+          'Cache-Control': 'no-cache',
+          'Vary': 'Accept-Encoding',
+        });
+        res.end(gzipped);
+      });
+    } else {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': buf.length,
+        'Cache-Control': 'no-cache',
+      });
+      res.end(buf);
+    }
   });
 }
 
@@ -620,16 +728,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (p === '/' || p === '/index.html' || p.startsWith('/ipo/')) {
+            if (p === '/' || p === '/index.html' || p.startsWith('/ipo/')) {
       // /ipo/:id routes are client-side views of the SPA — always serve the shell.
-      return sendFile(res, path.join(PUBLIC_DIR, 'index.html'));
+      return sendIndexHtml(res, req);
     }
-    if (p === '/app.js') return sendFile(res, path.join(PUBLIC_DIR, 'app.js'));
-    if (p === '/config.js') return sendFile(res, path.join(PUBLIC_DIR, 'config.js'));
-    if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'));
-    if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'));
-    if (p === '/favicon.png') return sendFile(res, path.join(PUBLIC_DIR, 'favicon.png'));
-    if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'));
+    if (p === '/app.js') return sendFile(res, path.join(PUBLIC_DIR, 'app.js'), { acceptEncoding: req.headers['accept-encoding'] || '' });
+    if (p === '/config.js') return sendFile(res, path.join(PUBLIC_DIR, 'config.js'), { acceptEncoding: req.headers['accept-encoding'] || '' });
+    if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
+    if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
+    if (p === '/favicon.png') return sendFile(res, path.join(PUBLIC_DIR, 'favicon.png'), { cache: 'public, max-age=86400' });
+    if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
     if (p.startsWith('/icons/')) {
       // PWA icons — plain filenames only (the regex blocks ../ traversal).
       const name = p.slice('/icons/'.length);

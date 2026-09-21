@@ -3,17 +3,19 @@
  * Strategies:
  *   - Navigations (HTML):     network-first → cached app shell when offline.
  *   - /api/* requests:        network-first → last good response (stale beats none).
- *   - Other same-origin GETs: stale-while-revalidate (instant, refresh in background).
+ *   - Images:                 stale-while-revalidate (instant, refresh in bg).
+ *   - Other same-origin GETs: stale-while-revalidate (instant, refresh in bg).
  *
  * Everything is keyed off the registration scope, so the same file works at
  * the domain root (workers.dev, `npm start`) and on GitHub Pages subpaths.
  */
 'use strict';
 
-const VERSION = 'v23';
+const VERSION = 'v24';
 
 const SHELL_CACHE = `ipo-shell-${VERSION}`;
 const API_CACHE = `ipo-api-${VERSION}`;
+const IMG_CACHE = `ipo-images-${VERSION}`;
 
 self.addEventListener('install', (event) => {
   const base = new URL(self.registration.scope).pathname; // '/' or '/<repo>/'
@@ -31,7 +33,6 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      // `cache: 'reload'` bypasses the HTTP cache so the shell is picked up fresh.
       await Promise.allSettled(shell.map((u) => cache.add(new Request(u, { cache: 'reload' }))));
       await self.skipWaiting();
     })()
@@ -41,7 +42,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keep = [SHELL_CACHE, API_CACHE];
+      const keep = [SHELL_CACHE, API_CACHE, IMG_CACHE];
       const keys = await caches.keys();
       await Promise.all(
         keys
@@ -58,6 +59,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
+
+  // Cache images with stale-while-revalidate for better offline experience
+  if (sameOrigin && req.destination === 'image') {
+    event.respondWith(staleWhileRevalidate(req, IMG_CACHE));
+    return;
+  }
 
   if (sameOrigin && /\/api\//.test(url.pathname)) {
     event.respondWith(networkFirst(req, API_CACHE));

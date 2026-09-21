@@ -6,47 +6,62 @@
   <title>IPO India — Live Upcoming &amp; Listed IPO Tracker with Investment Score</title>
   <meta name="description" content="Live Indian IPO tracker: upcoming, open and recently listed IPOs with subscription, fundamentals, valuation, listing dates and a 0-100 investability score." />
   <meta name="theme-color" content="#0a0d18" />
-  <!-- PWA: installable as an Android/desktop app -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="IPO India" />
-  <!-- favicon is injected with the site base in the script below -->
+  <!-- Preconnect to external domains early -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <!-- DNS prefetch for API endpoints -->
+  <link rel="dns-prefetch" href="https://bseindia.com" />
+  <link rel="dns-prefetch" href="https://finance.yahoo.com" />
+  <!-- Google Fonts with async loading (print media + onload swap) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" /></noscript>
+  <!-- Critical CSS inlined for fast above-the-fold rendering -->
+  <style>
+    :root{color-scheme:dark;--bg:#080b16;--surface:#10152a;--surface-2:#181f3a;--surface-3:#212a4d;--ink:#eef1fb;--ink-2:#a9b3cf;--ink-3:#75809f;--border:rgba(148,163,210,.14);--track:#1d2542;--brand:#818cf8;--brand-2:#a78bfa;--great:#34d399;--neutral:#fbbf24;--bad:#f87171;--neg:#f87171;--radius:18px}
+    :root[data-theme='light']{--bg:#f4f6fd;--surface:#fff;--surface-2:#f0f2fb;--surface-3:#e6e9f7;--ink:#0e1428;--ink-2:#4a546e;--ink-3:#7c869e;--border:rgba(14,20,40,.1);--track:#eaeefa;--brand:#4f46e5;--brand-2:#7c3aed;--great:#059669;--neutral:#d97706;--bad:#dc2626;--neg:#dc2626}
+    *{box-sizing:border-box}html,body{padding:0;margin:0}body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;transition:background .35s ease,color .35s ease}
+    h1,h2,h3,.brand-name,.val{font-family:'Space Grotesk','Inter',sans-serif}
+    .wrap{width:min(1240px,calc(100% - 48px));margin:0 auto}
+    .topbar{position:sticky;top:0;z-index:60;backdrop-filter:blur(16px) saturate(1.6);background:rgba(10,13,26,.72);border-bottom:1px solid rgba(148,163,210,.12)}
+    .topbar-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
+    .brand{display:flex;align-items:center;gap:11px};.brand:hover{opacity:.85}
+    .brand-mark{width:40px;height:40px;border-radius:13px}
+    .brand-name{font-size:18px;font-weight:800}
+    .brand-sub{font-size:11px;color:var(--ink-3);font-weight:500}
+    .topbar-right{display:flex;align-items:center;gap:14px}
+    .icon-btn{background:none;border:none;color:var(--ink-3);cursor:pointer;padding:8px;border-radius:10px}
+    .icon-btn:hover{background:rgba(148,163,210,.1)}
+    .updated-stamp{font-size:12px;color:var(--ink-3)}
+    .updated-stamp.live{color:var(--great)}
+    .market-strip{display:flex;align-items:center;gap:14px;padding:10px 0;font-size:12.5px;color:var(--ink-3)}
+    main#app{width:100%}
+    .page-loading{display:flex;align-items:center;justify-content:center;padding:60px 16px}
+    .spinner{width:44px;height:44px;border:3px solid var(--surface-2);border-top-color:var(--brand);border-radius:50%;animation:spin .9s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .foot{margin-top:auto;padding:24px 0;border-top:1px solid var(--border)}
+    .foot p,.foot-note{font-size:12px;color:var(--ink-3);line-height:1.6}
+    .foot a{color:var(--brand)}
+    @media(max-width:768px){.wrap{padding:0 16px}}
+  </style>
+  <!-- Theme detection (minified, non-blocking) -->
   <script>
-    // set theme before first paint to avoid flash
-    (function () {
-      try {
-        var t = localStorage.getItem('ipo-theme');
-        if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.documentElement.dataset.theme = t;
-      } catch (e) { document.documentElement.dataset.theme = 'dark'; }
-    })();
+    !function(){try{var t=localStorage.getItem("ipo-theme");document.documentElement.dataset.theme=t||(window.matchMedia&&(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))||"dark"}catch(e){document.documentElement.dataset.theme="dark"};var m=location.pathname.match(/^(.*?)( \/ipo\/.*)$/);window.IPO_BASE=m&&m[1]?m[1]+'/':'/'}();
   </script>
-  <script>
-    // Site base path — supports GitHub Pages project subpaths (e.g. /ipo-india/)
-    // as well as root hosting (workers.dev, `npm start`). Detail routes always
-    // look like <base>/ipo/<id>, so stripping a trailing /ipo/... gives the base.
-    (function () {
-      var m = location.pathname.match(/^(.*?)(\/ipo\/.*)?$/);
-      var b = m && m[1] ? m[1] : '/';
-      if (b.charAt(b.length - 1) !== '/') b += '/';
-      window.IPO_BASE = b;
-      document.write('<link rel="stylesheet" href="' + b + 'styles.css" />');
-      document.write('<link rel="manifest" href="' + b + 'manifest.webmanifest" />');
-      document.write('<link rel="apple-touch-icon" href="' + b + 'icons/icon-180.png" />');
-      document.write('<link rel="icon" type="image/png" href="' + b + 'favicon.png" />');
-    })();
-  </script>
-
+  <!-- Preload non-critical styles async -->
+  <link rel="preload" href="%BASE%styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="%BASE%styles.css" /></noscript>
 </head>
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
       <a href="/" class="brand" data-link>
-        <span class="brand-mark" id="brandMark"></span>
+        <span class="brand-mark">
+          <img alt="" src="%BASE%icons/logo-mark.png" width="40" height="40" loading="eager" fetchpriority="high" />
+        </span>
         <span class="brand-text">
           <span class="brand-name">IPO India</span>
           <span class="brand-sub">live tracker &amp; scorecard</span>
@@ -63,14 +78,6 @@
         </button>
       </div>
     </div>
-    <script>
-      // Header logo mark — src resolved against the site base (root or /<repo>/)
-      // so it also loads on client-side /ipo/:id routes.
-      (function () {
-        var el = document.getElementById('brandMark');
-        if (el) el.innerHTML = '<img alt="" src="' + (window.IPO_BASE || '/') + 'icons/logo-mark.png" />';
-      })();
-    </script>
   </header>
 
   <!-- Market strip: Sensex / Nifty / USD-INR / gold / crude / S&P (filled by app.js) -->
@@ -94,13 +101,18 @@
     </div>
   </footer>
 
+  <!-- Load config and app with defer to prevent blocking -->
+  <script src="%BASE%config.js" defer></script>
+  <script src="%BASE%app.js" defer></script>
+  <!-- Prefetch detail page code for faster navigation -->
+  <link rel="prefetch" href="%BASE%app-detail.js" as="script" />
+  <!-- Register service worker -->
   <script>
-    // Load deployment config + app from the site base (root on workers.dev,
-    // /<repo>/ on GitHub Pages). document.write keeps execution order intact.
-    document.write(
-      '<script src="' + window.IPO_BASE + 'config.js"><\/script>' +
-      '<script src="' + window.IPO_BASE + 'app.js"><\/script>'
-    );
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('%BASE%sw.js?v=24').catch(function(){});
+      });
+    }
   </script>
 </body>
 </html>
