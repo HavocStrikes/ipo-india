@@ -11,8 +11,8 @@
   "compatibility_date": "2026-09-01",
 
   // Serve public/ as static assets + SPA fallback for /ipo/:id deep links.
-  // run_worker_first sends /api/* and /healthz to the Worker; everything else
-  // is served straight from the asset store.
+  // Requests come to the Worker first (run_worker_first below); /api/* and
+  // /healthz are answered there, everything else is proxied to the asset store.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
