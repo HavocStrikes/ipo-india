@@ -162,6 +162,25 @@
     return res.json();
   }
 
+  /** Run non-critical work after first paint so it never races the IPO list. */
+  function deferIdle(fn, wait = 1800) {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => setTimeout(fn, 0), { timeout: wait });
+    } else {
+      setTimeout(fn, Math.min(wait, 1200));
+    }
+  }
+
+  // Cross-origin API (GitHub Pages → Worker): warm the TLS/HTTP2 connection
+  // early without blocking the critical list fetch.
+  if (API_BASE && /^https?:\/\//.test(API_BASE)) {
+    const lk = document.createElement('link');
+    lk.rel = 'preconnect';
+    lk.href = API_BASE;
+    lk.crossOrigin = 'anonymous';
+    document.head.appendChild(lk);
+  }
+
   function fetchList() {
     const p = new URLSearchParams();
     p.set('status', state.tab);
@@ -1381,20 +1400,42 @@
     let saved = null;
     try { saved = localStorage.getItem('ipo-sub-email'); } catch (e) {}
     if (saved) showDone(saved, true);
-    $('#subAgain').addEventListener('click', () => {
+    const againBtn = $('#subAgain');
+    if (againBtn) againBtn.addEventListener('click', () => {
       done.hidden = true;
       form.hidden = false;
       emailInput.focus();
     });
-    api('/api/subscribers/count')
-      .then((c) => {
-        const el = $('#subCount');
-        if (el && c && c.count > 0) {
-          el.hidden = false;
-          el.querySelector('b').textContent = numFmt(c.count);
+    // Social-proof count is below the fold — fetch it only when the
+    // subscribe card scrolls into view (or idle fallback), so it never
+    // competes with the IPO list on first paint.
+    const loadCount = () => {
+      if (loadCount.done) return;
+      loadCount.done = true;
+      api('/api/subscribers/count')
+        .then((c) => {
+          const el = $('#subCount');
+          if (el && c && c.count > 0) {
+            el.hidden = false;
+            el.querySelector('b').textContent = numFmt(c.count);
+          }
+        })
+        .catch(() => {});
+    };
+    const subSection = form.closest('.subscribe');
+    if (subSection && 'IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        if (entries.some((en) => en.isIntersecting)) {
+          io.disconnect();
+          loadCount();
         }
-      })
-      .catch(() => {});
+      }, { rootMargin: '400px' });
+      io.observe(subSection);
+      // Safety net: if the user never scrolls, still load it when idle.
+      deferIdle(loadCount, 6000);
+    } else {
+      deferIdle(loadCount, 2500);
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const email = emailInput.value.trim();
@@ -1464,15 +1505,9 @@
     if (meta) meta.content = document.documentElement.dataset.theme === 'dark' ? '#0a0d18' : '#f4f6fd';
 
     // Register the service worker at the site base so it also works on GitHub
-    // Pages project subpaths. Browsers only allow SW on HTTPS (or localhost).
-    if ('serviceWorker' in navigator) {
-      const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
-      if (secure) {
-        navigator.serviceWorker
-          .register(`${SITE_BASE}sw.js`, { scope: SITE_BASE })
-          .catch((err) => console.warn('[pwa] service worker registration failed:', err));
-      }
-    }
+    // Pages project subpaths. NOTE: index.html already registers sw.js lazily
+    // (idle after load) — registering again here would race first paint, so
+    // this module only wires the install prompt.
 
     // "Install app" pill — shown when the browser fires beforeinstallprompt
     // (Android/desktop Chrome & Edge). On iOS the button never appears; users
@@ -1506,9 +1541,11 @@
   if (brand && SITE_BASE !== '/') brand.setAttribute('href', SITE_BASE);
   initTheme();
   initPwa();
-  route();
-  loadMeta();
-  loadMarkets();
+  route(); // critical: IPO list
+  loadMeta(); // critical: tab counts + freshness
+  // Nice-to-have market strip: deferred until after first paint so its
+  // cross-origin fetch never races the IPO list on slow networks.
+  deferIdle(loadMarkets, 2200);
   // auto-refresh data freshness + market strip every 5 min
   setInterval(loadMeta, 5 * 60 * 1000);
   setInterval(loadMarkets, 5 * 60 * 1000);

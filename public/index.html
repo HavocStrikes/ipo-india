@@ -10,15 +10,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="IPO India" />
-  <!-- Preconnect to external domains early -->
+  <!-- Preconnect to font origins early (only external critical origin) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- DNS prefetch for API endpoints -->
-  <link rel="dns-prefetch" href="https://bseindia.com" />
-  <link rel="dns-prefetch" href="https://finance.yahoo.com" />
-  <!-- Google Fonts with async loading (print media + onload swap) -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" /></noscript>
+  <!-- Google Fonts: trimmed weights (400/600/700 + display headings) with swap.
+       Full 9-weight set pulled ~2x the font bytes for weights the UI never uses. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" /></noscript>
   <!-- Critical CSS inlined for fast above-the-fold rendering -->
   <style>
     :root{color-scheme:dark;--bg:#080b16;--surface:#10152a;--surface-2:#181f3a;--surface-3:#212a4d;--ink:#eef1fb;--ink-2:#a9b3cf;--ink-3:#75809f;--border:rgba(148,163,210,.14);--track:#1d2542;--brand:#818cf8;--brand-2:#a78bfa;--great:#34d399;--neutral:#fbbf24;--bad:#f87171;--neg:#f87171;--radius:18px}
@@ -48,8 +46,10 @@
   </style>
   <!-- Theme detection (minified, non-blocking) -->
   <script>
-    !function(){try{var t=localStorage.getItem("ipo-theme");document.documentElement.dataset.theme=t||(window.matchMedia&&(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))||"dark"}catch(e){document.documentElement.dataset.theme="dark"};var m=location.pathname.match(/^(.*?)( \/ipo\/.*)$/);window.IPO_BASE=m&&m[1]?m[1]+'/':'/'}();
+    !function(){try{var t=localStorage.getItem("ipo-theme");document.documentElement.dataset.theme=t||(window.matchMedia&&(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))||"dark"}catch(e){document.documentElement.dataset.theme="dark"};var m=location.pathname.match(/^(.*?)(\/ipo\/.*)$/);window.IPO_BASE=m&&m[1]?m[1]+'/':'/'}();
   </script>
+  <!-- Preload the app script so it is discovered without waiting for parser end -->
+  <link rel="preload" href="%BASE%app.js" as="script" />
   <!-- Preload non-critical styles async -->
   <link rel="preload" href="%BASE%styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="%BASE%styles.css" /></noscript>
@@ -59,7 +59,7 @@
     <div class="wrap topbar-inner">
       <a href="/" class="brand" data-link>
         <span class="brand-mark">
-          <img alt="" src="%BASE%icons/logo-mark.png" width="40" height="40" loading="eager" fetchpriority="high" />
+          <img alt="IPO India logo" src="%BASE%icons/logo-mark.png" width="40" height="40" loading="eager" fetchpriority="high" decoding="async" />
         </span>
         <span class="brand-text">
           <span class="brand-name">IPO India</span>
@@ -103,13 +103,15 @@
   <!-- Load config and app with defer to prevent blocking -->
   <script src="%BASE%config.js" defer></script>
   <script src="%BASE%app.js" defer></script>
-  <!-- Prefetch detail page code for faster navigation -->
-  <link rel="prefetch" href="%BASE%app-detail.js" as="script" />
-  <!-- Register service worker -->
+  <!-- Register service worker lazily so precaching never races first paint -->
   <script>
     if ('serviceWorker' in navigator) {
+      var regSW = function() {
+        navigator.serviceWorker.register('%BASE%sw.js?v=26').catch(function(){});
+      };
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('%BASE%sw.js?v=25').catch(function(){});
+        if ('requestIdleCallback' in window) requestIdleCallback(regSW, { timeout: 4000 });
+        else setTimeout(regSW, 2500);
       });
     }
   </script>

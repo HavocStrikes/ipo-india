@@ -81,7 +81,7 @@ body {
     radial-gradient(800px 380px at 8% -90px, var(--bg-grad-b), transparent 60%),
     radial-gradient(700px 300px at 50% 118%, var(--bg-grad-c), transparent 60%),
     var(--bg);
-  background-attachment: fixed;
+  background-attachment: scroll;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -89,6 +89,11 @@ body {
   display: flex;
   flex-direction: column;
   transition: background 0.35s ease, color 0.35s ease;
+}
+/* Fixed gradient layers repaint on every scroll frame on mobile GPUs —
+ * keep the effect on fine-pointer desktops only. */
+@media (hover: hover) and (pointer: fine) {
+  body { background-attachment: fixed; }
 }
 h1, h2, h3, .brand-name, .verdict, .verdict-big, .val, .chip .n { font-family: 'Space Grotesk', 'Inter', sans-serif; }
 .wrap { width: min(1240px, calc(100% - 48px)); margin: 0 auto; }
@@ -246,6 +251,8 @@ main#app { flex: 1; padding: 30px 0 64px; }
 /* ---------- IPO cards ---------- */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(344px, 1fr)); gap: 16px; }
 .card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
   position: relative; overflow: hidden;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px 20px; cursor: pointer; box-shadow: var(--shadow-1);
@@ -552,7 +559,7 @@ main#app { flex: 1; padding: 30px 0 64px; }
   color: var(--ink-3); font-size: 13px; line-height: 1.55;
 }
 .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
-.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-1); min-width: 0; display: flex; flex-direction: column; }
+.chart-card { content-visibility: auto; contain-intrinsic-size: auto 300px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-1); min-width: 0; display: flex; flex-direction: column; }
 /* when a card shares a row with a taller chart, let its content fill the height */
 .chart-card > .meters, .chart-card > .funds, .chart-card > .donut-wrap { flex: 1 1 auto; justify-content: space-evenly; }
 .chart-card:last-child:nth-child(odd) { grid-column: 1 / -1; }

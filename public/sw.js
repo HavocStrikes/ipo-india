@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const VERSION = 'v25';
+const VERSION = 'v26';
 
 const SHELL_CACHE = `ipo-shell-${VERSION}`;
 const API_CACHE = `ipo-api-${VERSION}`;
@@ -19,6 +19,9 @@ const IMG_CACHE = `ipo-images-${VERSION}`;
 
 self.addEventListener('install', (event) => {
   const base = new URL(self.registration.scope).pathname; // '/' or '/<repo>/'
+  // Minimal first-paint shell only (~35KB gzip). The 512px PWA icons
+  // (~200KB) are cached on-demand by the image handler below instead of
+  // competing with the API + app shell on first visit.
   const shell = [
     base,
     `${base}styles.css`,
@@ -27,8 +30,6 @@ self.addEventListener('install', (event) => {
     `${base}manifest.webmanifest`,
     `${base}favicon.png`,
     `${base}icons/logo-mark.png`,
-    `${base}icons/icon-192.png`,
-    `${base}icons/icon-512.png`,
   ];
   event.waitUntil(
     (async () => {
