@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Catch what slipped through last time: a syntax error reached main
+      # because nothing parsed the files before deploying.
+      - name: Syntax check (CJS)
+        run: |
+          node --check server.js
+          node --check send-update.js
+          for f in lib/*.js public/*.js scripts/*.js test*.js test/*.js; do
+            node --check "$f"
+          done
+
+      # Worker sources are ESM in a "type": "commonjs" package — check them as modules.
+      - name: Syntax check (Worker ESM)
+        run: |
+          for f in worker/src/*.js; do
+            node --check --input-type=module < "$f"
+          done
+
+      - name: Unit tests
+        run: npm test
+
+      # test-render.js only exercises its default 'detail' mode under
+      # `node --test`; the other four modes are opt-in and cover the
+      # sparse/bare/stale/list render paths.
+      - name: Render smoke tests (all modes)
+        run: |
+          for mode in detail list sparse bare stale; do
+            node test-render.js "$mode"
+          done
