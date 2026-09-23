@@ -163,11 +163,16 @@ global.document = {
 global.window = { addEventListener() {}, matchMedia: () => ({ matches: true }), scrollTo() {} };
 /* app.js defers the market strip and the subscriber count with
  * requestIdleCallback + IntersectionObserver (both below the fold on purpose).
- * Emulate a browser that supports them — and fires immediately — so that work
- * still lands inside this test's assertion window instead of the 2.2 s idle
- * fallback. */
-global.requestIdleCallback = (cb) =>
-  setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
+ * Emulate them so the deferred work still happens — and fire the idle callback
+ * *synchronously* so it is the app that registers the resulting timer during
+ * `require`, before the assert timer below is even created. If the callback
+ * were deferred (setTimeout), the two 0 ms timers would race and the market
+ * strip could legitimately be missing when the assertions run.
+ *
+ * Ordering afterwards is structural, not timing-based: the app's fetch shim
+ * resolves with Promise.resolve, so the whole loadMarkets -> renderMarkets
+ * chain drains in microtasks before the next timer callback runs. */
+global.requestIdleCallback = (cb) => cb({ didTimeout: false, timeRemaining: () => 50 });
 global.window.requestIdleCallback = global.requestIdleCallback;
 global.IntersectionObserver = class {
   constructor(cb) { this.cb = cb; }
