@@ -35,6 +35,9 @@ const {
   unsubscribeToken,
 } = require('./lib/subscriptions');
 const { sendMail, welcomeEmail, isMailConfigured, providerName } = require('./lib/mailer');
+const { countKnown, summarize, inWindow } = require('./lib/wire');
+const { NOTABLE_NAMES } = require('./lib/notable');
+const { invalidLinkPage, unsubscribedPage } = require('./lib/unsubscribe-pages');
 
 const PORT = process.env.PORT || 8787;
 const REFRESH_MINUTES = Number(process.env.REFRESH_MINUTES || 10);
@@ -44,34 +47,20 @@ const HISTORY_YEARS = Number(process.env.HISTORY_YEARS || 1); // years of listed
 // Curated windows (like Groww): upcoming = opens within the next N days,
 // listed = listed within the last N days. `?all=1` bypasses the window.
 const WINDOW_DAYS = Number(process.env.WINDOW_DAYS || 31);
+// Base path for %BASE% placeholders in index.html — '/' locally (the Worker
+// substitutes the same); GitHub Pages rewrites it at deploy time (pages.yml).
+const BASE_PATH = (() => {
+  let b = process.env.BASE_PATH || '/';
+  if (!b.startsWith('/')) b = '/' + b;
+  if (!b.endsWith('/')) b += '/';
+  return b;
+})();
 
-// Famous/Notable IPOs that people search for — we search deeper history for these.
-const NOTABLE_NAMES = [
-  'zomato', 'swiggy', 'paytm', 'one97', 'lic', 'life insurance',
-  'oyo', 'phonepe', 'flipkart', 'jio', 'reliance jio',
-  'delhivery', 'nykaa', 'fsn e-ventures', 'idea',
-  'sbi cards', 'policybazaar', 'pb fintech',
-  'hdfc bank', 'hdfc life', 'icici lombard',
-  'tata motors', 'tata technologies', 'hyundai',
-  'coal india', 'rec limited', 'pfc',
-];
+// NOTABLE_NAMES + isNotableName live in lib/notable.js (shared with the Worker).
 const NOTABLE_TTL = 60 * 60 * 1000; // refresh notable list every hour
 const NOTABLE_HISTORY_YEARS = 6; // go back to 2020 for notable IPOs
 const VERIFY_TTL = 60 * 60 * 1000; // refresh BSE cross-verification every hour
 const MARKETS_TTL = 5 * 60 * 1000; // refresh market strip quotes every 5 min
-
-
-/** True if the IPO's key date falls inside the curated window for its status. */
-function inWindow(ipo, status, now = new Date()) {
-  const day = 86400000;
-  const t = now.toISOString().slice(0, 10);
-  const from = new Date(now.getTime() - WINDOW_DAYS * day).toISOString().slice(0, 10);
-  const to = new Date(now.getTime() + WINDOW_DAYS * day).toISOString().slice(0, 10);
-  if (status === 'upcoming') return !!ipo.openDate && ipo.openDate >= t && ipo.openDate <= to;
-  if (status === 'listed') return !!ipo.listingDate && ipo.listingDate <= t && ipo.listingDate >= from;
-  if (status === 'closed') return !!ipo.closeDate && ipo.closeDate < t && ipo.closeDate >= from;
-  return true;
-}
 
 const cache = new TTLCache();
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -83,14 +72,13 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
-  // Add missing MIME types
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
+  '.otf': 'font/otf'
 };
 
 function currentYear() {
@@ -164,16 +152,6 @@ async function buildDataset() {
   });
 
   return { fetchedAt: new Date().toISOString(), yearsLoaded, count: final.length, errors, ipos: final };
-}
-
-function countKnown(ipo) {
-  let n = 0;
-  if (ipo.closeDate) n++;
-  if (ipo.listingDate) n++;
-  if (ipo.subscriptionX !== null && ipo.subscriptionX !== undefined) n++;
-  if (ipo.financials && ipo.financials.patCr !== null) n++;
-  if (ipo.kpi && ipo.kpi.pePost !== null) n++;
-  return n;
 }
 
 async function getDataset() {
@@ -254,72 +232,6 @@ function getMarkets() {
   });
 }
 
-
-// __FAMOUS1__
-const FAMOUS_IPOS_PART1 = [
-  {
-    id: 10001, name: 'Zomato Ltd.', slug: 'zomato-ipo', category: 'Mainboard',
-    status: 'listed', openDate: '2021-07-14', closeDate: '2021-07-16', listingDate: '2021-07-23',
-    issuePrice: 76, issueAmountCr: 9375, subscriptionX: 38.25,
-    listing: { openPrice: 115, closePrice: 126, gainPct: 65.79 },
-    market: { price: 130.50, week52High: 169.25, week52Low: 98.50 },
-    kpi: { pePost: null, ronw: null, priceToBook: null },
-    reviews: { subscribe: 0, neutral: 0, avoid: 0 },
-    isin: 'INE758T01015', bseCode: '543320', nseSymbol: 'ZOMATO',
-    detailUrl: 'https://www.chittorgarh.com/ipo/zomato-ipo/1895/',
-    source: 'curated', famous: true,
-  },
-  {
-    id: 10002, name: 'Paytm (One97 Communications) Ltd.', slug: 'one97-communications-ipo', category: 'Mainboard',
-    status: 'listed', openDate: '2021-11-08', closeDate: '2021-11-10', listingDate: '2021-11-18',
-    issuePrice: 2150, issueAmountCr: 18300, subscriptionX: 1.82,
-    listing: { openPrice: 1950, closePrice: 1560, gainPct: -27.44 },
-    market: { price: 620, week52High: 998, week52Low: 385 },
-    kpi: { pePost: null, ronw: null, priceToBook: null },
-    reviews: { subscribe: 0, neutral: 0, avoid: 0 },
-    isin: 'INE982J01020', bseCode: '543280', nseSymbol: 'PAYTM',
-    detailUrl: 'https://www.chittorgarh.com/ipo/one97-communications-ipo/1857/',
-    source: 'curated', famous: true,
-  },
-  {
-    id: 10003, name: 'LIC (Life Insurance Corporation of India)', slug: 'lic-ipo', category: 'Mainboard',
-    status: 'listed', openDate: '2022-05-04', closeDate: '2022-05-09', listingDate: '2022-05-17',
-    issuePrice: 949, issueAmountCr: 20885, subscriptionX: 2.99,
-    listing: { openPrice: 900, closePrice: 875, gainPct: -7.8 },
-    market: { price: 625, week52High: 948, week52Low: 540 },
-    kpi: { pePost: null, ronw: null, priceToBook: null },
-    reviews: { subscribe: 0, neutral: 0, avoid: 0 },
-    isin: 'INE0J1Y01017', bseCode: '543526', nseSymbol: 'LICI',
-    detailUrl: 'https://www.chittorgarh.com/ipo/lic-ipo/1947/',
-    source: 'curated', famous: true,
-  },
-  {
-    id: 10004, name: 'Nykaa (FSN E-Commerce Ventures) Ltd.', slug: 'nykaa-ipo', category: 'Mainboard',
-    status: 'listed', openDate: '2021-10-28', closeDate: '2021-11-01', listingDate: '2021-11-10',
-    issuePrice: 1125, issueAmountCr: 5352, subscriptionX: 81.7,
-    listing: { openPrice: 2004, closePrice: 2206, gainPct: 96.09 },
-    market: { price: 145, week52High: 250, week52Low: 110 },
-    kpi: { pePost: null, ronw: null, priceToBook: null },
-    reviews: { subscribe: 0, neutral: 0, avoid: 0 },
-    isin: 'INE388Y01029', bseCode: '543329', nseSymbol: 'NYKAA',
-    detailUrl: 'https://www.chittorgarh.com/ipo/nykaa-ipo/1885/',
-    source: 'curated', famous: true,
-  },
-  {
-    id: 10005, name: 'Delhivery Ltd.', slug: 'delhivery-ipo', category: 'Mainboard',
-    status: 'listed', openDate: '2022-05-11', closeDate: '2022-05-13', listingDate: '2022-05-24',
-    issuePrice: 487, issueAmountCr: 5235, subscriptionX: 1.61,
-    listing: { openPrice: 500, closePrice: 568, gainPct: 16.63 },
-    market: { price: 385, week52High: 550, week52Low: 280 },
-    kpi: { pePost: null, ronw: null, priceToBook: null },
-    reviews: { subscribe: 0, neutral: 0, avoid: 0 },
-    isin: 'INE148O01028', bseCode: '543529', nseSymbol: 'DELHIVERY',
-    detailUrl: 'https://www.chittorgarh.com/ipo/delhivery-ipo/1952/',
-    source: 'curated', famous: true,
-  },
-];
-// __FAMOUS2__
-
 // ---- subscriptions: body parsing + light anti-spam rate limiting ----
 function readBody(req, limit = 10 * 1024) {
   return new Promise((resolve, reject) => {
@@ -368,147 +280,127 @@ function json(res, code, data) {
   res.end(body);
 }
 
-function sendFile(res, filePath, opts = {}) {
-  fs.readFile(filePath, (err, buf) => {
+// ---- static file serving: read cache + compressed-variant cache -------------
+// public/ files change only on edit/deploy, so cache the raw buffer and each
+// compressed variant keyed by mtime — compression runs once per file version
+// instead of on every request (the old code recompressed per request).
+const fileCache = new Map(); // path -> { mtimeMs, buf, variants: Map }
+
+function loadFile(filePath, transform, cb) {
+  fs.stat(filePath, (err, st) => {
+    if (err) return cb(err);
+    const hit = fileCache.get(filePath);
+    if (hit && hit.mtimeMs === st.mtimeMs) return cb(null, hit);
+    fs.readFile(filePath, (err2, raw) => {
+      if (err2) return cb(err2);
+      let buf = raw;
+      try {
+        if (transform) buf = transform(raw);
+      } catch (e) {
+        return cb(e);
+      }
+      const entry = { mtimeMs: st.mtimeMs, buf, variants: new Map() };
+      fileCache.set(filePath, entry);
+      cb(null, entry);
+    });
+  });
+}
+
+/** Promise-cached compressed variant (null = not worth compressing). */
+function compressed(entry, enc) {
+  if (!entry.variants.has(enc)) {
+    entry.variants.set(
+      enc,
+      new Promise((resolve) => {
+        const fn = enc === 'br' ? zlib.brotliCompress : zlib.gzip;
+        fn(entry.buf, (err, out) => resolve(err || out.length >= entry.buf.length ? null : out));
+      })
+    );
+  }
+  return entry.variants.get(enc);
+}
+
+const COMPRESSIBLE = [
+  'text/html',
+  'text/css',
+  'text/javascript',
+  'application/json',
+  'application/manifest+json',
+];
+
+/** Serve a cached entry: conditional GET (304) + brotli/gzip when beneficial. */
+function sendEntry(res, entry, contentType, opts = {}) {
+  const cache = opts.cache || 'public, max-age=3600';
+  const baseHeaders = {
+    'Content-Type': contentType,
+    'Cache-Control': cache,
+    'Last-Modified': new Date(entry.mtimeMs).toUTCString(),
+  };
+
+  const ims = Date.parse(opts.ifModifiedSince || '');
+  if (Number.isFinite(ims) && ims >= Math.floor(entry.mtimeMs / 1000) * 1000) {
+    res.writeHead(304, { ...baseHeaders, Vary: 'Accept-Encoding' });
+    res.end();
+    return;
+  }
+
+  const send = (body, encoding) => {
+    const headers = { ...baseHeaders, 'Content-Length': body.length };
+    if (encoding) {
+      headers['Content-Encoding'] = encoding;
+      headers['Vary'] = 'Accept-Encoding';
+    }
+    res.writeHead(200, headers);
+    res.end(body);
+  };
+
+  const accept = String(opts.acceptEncoding || '');
+  const wants =
+    COMPRESSIBLE.some((t) => contentType.includes(t)) &&
+    entry.buf.length > 1024 &&
+    (accept.includes('br') || accept.includes('gzip'));
+  if (!wants) return send(entry.buf);
+
+  const enc = accept.includes('br') ? 'br' : 'gzip';
+  compressed(entry, enc).then((out) => (out ? send(out, enc) : send(entry.buf)));
+}
+
+function sendFile(res, req, filePath, opts = {}) {
+  loadFile(filePath, null, (err, entry) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not found');
       return;
     }
-
-    const ext = path.extname(filePath);
-    const contentType = MIME[ext] || 'application/octet-stream';
-    const acceptEncoding = opts.acceptEncoding || 'identity';
-
-    // Determine if we should compress
-    const isText = ['text/html', 'text/css', 'text/javascript', 'application/json', 'application/manifest+json']
-      .some(t => contentType.includes(t));
-    
-    // Try brotli first (better compression), fall back to gzip
-    let useBrotli = false;
-    if (isText && acceptEncoding.includes('br') && buf.length > 1024) {
-      // Prefer brotli if client supports it
-      useBrotli = true;
-    }
-    
-    if (isText && (acceptEncoding.includes('gzip') || acceptEncoding.includes('br')) && buf.length > 1024) {
-      const useBrotliFinal = useBrotli && acceptEncoding.includes('br');
-      const compressFn = useBrotliFinal ? zlib.brotliCompress : zlib.gzip;
-      const encoding = useBrotliFinal ? 'br' : 'gzip';
-      
-      compressFn(buf, (gzErr, compressed) => {
-        if (gzErr || compressed.length >= buf.length) {
-          // Compression failed or produced larger output, serve uncompressed
-          serveUncompressed(res, buf, contentType);
-          return;
-        }
-        res.writeHead(200, {
-          'Content-Type': contentType,
-          'Content-Encoding': encoding,
-          'Content-Length': compressed.length,
-          'Cache-Control': opts.cache || 'public, max-age=3600',
-          'Vary': 'Accept-Encoding',
-        });
-        res.end(compressed);
-      });
-    } else {
-      serveUncompressed(res, buf, contentType);
-    }
-    
-    function serveUncompressed(res, buf, contentType) {
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Content-Length': buf.length,
-        'Cache-Control': opts.cache || 'public, max-age=3600',
-      });
-      res.end(buf);
-    }
+    sendEntry(res, entry, MIME[path.extname(filePath)] || 'application/octet-stream', {
+      ...opts,
+      acceptEncoding: req.headers['accept-encoding'] || '',
+      ifModifiedSince: req.headers['if-modified-since'],
+    });
   });
 }
 
-// Serve index.html with base path replacement for GitHub Pages support
+// Serve index.html with %BASE% substituted for BASE_PATH. GitHub Pages rewrites
+// the placeholder at deploy time instead (pages.yml); the Worker rewrites it
+// while serving assets. No host sniffing — one env var decides locally.
 function sendIndexHtml(res, req) {
   const filePath = path.join(PUBLIC_DIR, 'index.html');
-  fs.readFile(filePath, (err, buf) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not found');
-      return;
-    }
-    
-    // Determine base path from Host header
-    let base = '/';
-    const host = req.headers.host || '';
-    const isGitHubPages = host.includes('github.io') || host.includes('127.0.0.1');
-    if (host.includes('ipo-india')) {
-      base = '/ipo-india/';
-    }
-    
-    // Replace %BASE% placeholder
-    let html = buf.toString('utf8').replace(/%BASE%/g, base);
-    buf = Buffer.from(html, 'utf8');
-    
-    // Send with gzip if supported
-    const acceptEncoding = req.headers['accept-encoding'] || '';
-    if (acceptEncoding.includes('gzip') && buf.length > 1024) {
-      zlib.gzip(buf, (gzErr, gzipped) => {
-        if (gzErr || gzipped.length >= buf.length) {
-          res.writeHead(200, {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Content-Length': buf.length,
-            'Cache-Control': 'no-cache',
-          });
-          res.end(buf);
-          return;
-        }
-        res.writeHead(200, {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Content-Encoding': 'gzip',
-          'Content-Length': gzipped.length,
-          'Cache-Control': 'no-cache',
-          'Vary': 'Accept-Encoding',
-        });
-        res.end(gzipped);
+  loadFile(
+    filePath,
+    (raw) => Buffer.from(raw.toString('utf8').replace(/%BASE%/g, BASE_PATH), 'utf8'),
+    (err, entry) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+      sendEntry(res, entry, 'text/html; charset=utf-8', {
+        cache: 'no-cache',
+        acceptEncoding: req.headers['accept-encoding'] || '',
+        ifModifiedSince: req.headers['if-modified-since'],
       });
-    } else {
-      res.writeHead(200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Length': buf.length,
-        'Cache-Control': 'no-cache',
-      });
-      res.end(buf);
     }
-  });
-}
-
-function summarize(ipo) {
-  return {
-    id: ipo.id,
-    name: ipo.name,
-    slug: ipo.slug,
-    category: ipo.category,
-    exchange: ipo.exchange,
-    status: ipo.status,
-    openDate: ipo.openDate,
-    closeDate: ipo.closeDate,
-    allotmentDate: ipo.allotmentDate,
-    listingDate: ipo.listingDate,
-    issuePrice: ipo.issuePrice,
-    issueAmountCr: ipo.issueAmountCr,
-    subscriptionX: ipo.subscriptionX,
-    liveSub: ipo.liveSub ?? null,
-    listingGainPct: ipo.listing && ipo.listing.gainPct,
-    marketPrice: ipo.market && ipo.market.price,
-    pePost: ipo.kpi && ipo.kpi.pePost,
-    ronw: ipo.kpi && (ipo.kpi.ronw ?? ipo.kpi.roe),
-    score: {
-      score: ipo.score.score,
-      tone: ipo.score.tone,
-      confidence: ipo.score.confidence,
-    },
-    detailUrl: ipo.detailUrl,
-    nseSymbol: ipo.nseSymbol,
-  };
+  );
 }
 
 const server = http.createServer(async (req, res) => {
@@ -525,7 +417,7 @@ const server = http.createServer(async (req, res) => {
       let rows = ds.ipos;
       if (status && status !== 'all') rows = rows.filter((i) => i.status === status);
       if (!showAll && status && status !== 'all' && status !== 'open') {
-        rows = rows.filter((i) => inWindow(i, status));
+        rows = rows.filter((i) => inWindow(i, status, WINDOW_DAYS));
       }
       if (category && category !== 'all') {
         rows = rows.filter((i) => (i.category || '').toLowerCase() === category.toLowerCase());
@@ -577,7 +469,7 @@ const server = http.createServer(async (req, res) => {
       const ds = await getDataset();
       const counts = { open: 0, upcoming: 0, closed: 0, listed: 0 };
       ds.ipos.forEach((i) => {
-        if (counts[i.status] !== undefined && inWindow(i, i.status)) counts[i.status]++;
+        if (counts[i.status] !== undefined && inWindow(i, i.status, WINDOW_DAYS)) counts[i.status]++;
       });
       const vdoc = await getVerifyDoc();
       json(res, 200, {
@@ -703,12 +595,9 @@ const server = http.createServer(async (req, res) => {
       const email = (url.searchParams.get('email') || '').trim().toLowerCase();
       const token = url.searchParams.get('token') || '';
       const valid = isValidEmail(email) && token && token === unsubscribeToken(email);
-      const emailEsc = email.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       if (!valid) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(
-          '<!doctype html><html><head><meta charset="utf-8"><title>IPO India</title></head><body style="font-family:Arial,sans-serif;background:#f4f6fd;color:#0e1428;display:grid;place-items:center;min-height:100vh;margin:0"><div style="text-align:center;padding:24px"><h1>Invalid link</h1><p style="color:#4a546e">This unsubscribe link is broken or incomplete.</p></div></body></html>'
-        );
+        res.end(invalidLinkPage());
         return;
       }
       const result = removeSubscriber(email);
@@ -716,31 +605,27 @@ const server = http.createServer(async (req, res) => {
         `[unsubscribe] ${result.removed ? 'removed' : 'not on list'} — ${email.replace(/^(.{2}).*(@.*)$/, '$1***$2')}`
       );
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(
-        `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed — IPO India</title></head>` +
-          `<body style="font-family:Arial,sans-serif;background:#f4f6fd;color:#0e1428;display:grid;place-items:center;min-height:100vh;margin:0">` +
-          `<div style="text-align:center;padding:24px"><div style="font-size:40px">✓</div><h1 style="margin:8px 0">You&rsquo;re unsubscribed</h1>` +
-          `<p style="color:#4a546e">${result.removed ? `<b>${emailEsc}</b> has been removed from the IPO India mailing list.` : 'This address was not on the mailing list.'}</p>` +
-          `<p style="font-size:12px;color:#8a94ad">Sorry to see you go — you can always resubscribe on the site.</p></div></body></html>`
-      );
+      res.end(unsubscribedPage({ removed: result.removed, email }));
       return;
     }
 
-            if (p === '/' || p === '/index.html' || p.startsWith('/ipo/')) {
+    if (p === '/' || p === '/index.html' || p.startsWith('/ipo/')) {
       // /ipo/:id routes are client-side views of the SPA — always serve the shell.
       return sendIndexHtml(res, req);
     }
-    if (p === '/app.js') return sendFile(res, path.join(PUBLIC_DIR, 'app.js'), { acceptEncoding: req.headers['accept-encoding'] || '' });
-    if (p === '/config.js') return sendFile(res, path.join(PUBLIC_DIR, 'config.js'), { acceptEncoding: req.headers['accept-encoding'] || '' });
-    if (p === '/styles.css') return sendFile(res, path.join(PUBLIC_DIR, 'styles.css'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
-    if (p === '/manifest.webmanifest') return sendFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
-    if (p === '/favicon.png') return sendFile(res, path.join(PUBLIC_DIR, 'favicon.png'), { cache: 'public, max-age=86400' });
-    if (p === '/sw.js') return sendFile(res, path.join(PUBLIC_DIR, 'sw.js'), { acceptEncoding: req.headers['accept-encoding'] || '', cache: 'public, max-age=86400' });
+    // Code assets: no-cache + If-Modified-Since 304s — a deploy can never leave
+    // a stale app.js/styles.css pair in the browser (the old max-age did).
+    if (p === '/app.js') return sendFile(res, req, path.join(PUBLIC_DIR, 'app.js'), { cache: 'no-cache' });
+    if (p === '/config.js') return sendFile(res, req, path.join(PUBLIC_DIR, 'config.js'), { cache: 'no-cache' });
+    if (p === '/styles.css') return sendFile(res, req, path.join(PUBLIC_DIR, 'styles.css'), { cache: 'no-cache' });
+    if (p === '/sw.js') return sendFile(res, req, path.join(PUBLIC_DIR, 'sw.js'), { cache: 'no-cache' });
+    if (p === '/manifest.webmanifest') return sendFile(res, req, path.join(PUBLIC_DIR, 'manifest.webmanifest'), { cache: 'public, max-age=86400' });
+    if (p === '/favicon.png') return sendFile(res, req, path.join(PUBLIC_DIR, 'favicon.png'), { cache: 'public, max-age=86400' });
     if (p.startsWith('/icons/')) {
       // PWA icons — plain filenames only (the regex blocks ../ traversal).
       const name = p.slice('/icons/'.length);
       if (/^[A-Za-z0-9._-]+$/.test(name)) {
-        return sendFile(res, path.join(PUBLIC_DIR, 'icons', name));
+        return sendFile(res, req, path.join(PUBLIC_DIR, 'icons', name), { cache: 'public, max-age=604800' });
       }
     }
     if (p === '/healthz') return json(res, 200, { ok: true });

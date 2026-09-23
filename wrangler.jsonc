@@ -17,7 +17,10 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/healthz", "/__scheduled"]
+    // Route every request through the Worker first so HTML responses get the
+    // %BASE% placeholder substituted (the Worker hosts the site at the domain
+    // root; GitHub Pages rewrites it at deploy time instead — see pages.yml).
+    "run_worker_first": true
   },
 
   "kv_namespaces": [

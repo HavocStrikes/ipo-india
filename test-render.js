@@ -141,6 +141,10 @@ function makeEl() {
     classList: { add() {}, remove() {}, contains: () => false },
     addEventListener() {}, removeEventListener() {},
     querySelector: () => makeEl(), querySelectorAll: () => [],
+    // app.js walks up from the subscribe form to its section (bindSubscribe).
+    // The shim has no tree, so hand back a stand-in section to exercise the
+    // real IntersectionObserver path instead of throwing.
+    closest: (sel) => getEl(`closest:${sel}`),
     appendChild() {}, insertBefore() {}, remove() { this._removed = true; },
     focus() {}, setAttribute() {}, getAttribute: () => null,
   };
@@ -152,10 +156,26 @@ global.document = {
   documentElement: { dataset: { theme: 'dark' } },
   title: '',
   body: getEl('body'),
+  head: getEl('head'),
   createElement: () => makeEl(),
   addEventListener() {},
 };
 global.window = { addEventListener() {}, matchMedia: () => ({ matches: true }), scrollTo() {} };
+/* app.js defers the market strip and the subscriber count with
+ * requestIdleCallback + IntersectionObserver (both below the fold on purpose).
+ * Emulate a browser that supports them — and fires immediately — so that work
+ * still lands inside this test's assertion window instead of the 2.2 s idle
+ * fallback. */
+global.requestIdleCallback = (cb) =>
+  setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 0);
+global.window.requestIdleCallback = global.requestIdleCallback;
+global.IntersectionObserver = class {
+  constructor(cb) { this.cb = cb; }
+  observe() { this.cb([{ isIntersecting: true }]); }
+  unobserve() {}
+  disconnect() {}
+};
+global.window.IntersectionObserver = global.IntersectionObserver;
 global.history = { pushState() {} };
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 global.location = { pathname: MODE === 'list' ? '/' : '/ipo/1895' };

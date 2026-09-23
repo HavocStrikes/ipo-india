@@ -6,3 +6,4 @@ data/
 .dev.vars
 
 *.deb
+.git-credentials

@@ -10,13 +10,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="IPO India" />
+  <link rel="icon" type="image/png" href="%BASE%favicon.png" />
+  <link rel="apple-touch-icon" href="%BASE%icons/icon-180.png" />
+  <link rel="manifest" href="%BASE%manifest.webmanifest" />
   <!-- Preconnect to font origins early (only external critical origin) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Google Fonts: trimmed weights (400/600/700 + display headings) with swap.
        Full 9-weight set pulled ~2x the font bytes for weights the UI never uses. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" /></noscript>
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" /></noscript>
   <!-- Critical CSS inlined for fast above-the-fold rendering -->
   <style>
     :root{color-scheme:dark;--bg:#080b16;--surface:#10152a;--surface-2:#181f3a;--surface-3:#212a4d;--ink:#eef1fb;--ink-2:#a9b3cf;--ink-3:#75809f;--border:rgba(148,163,210,.14);--track:#1d2542;--brand:#818cf8;--brand-2:#a78bfa;--great:#34d399;--neutral:#fbbf24;--bad:#f87171;--neg:#f87171;--radius:18px}
@@ -26,7 +29,7 @@
     .wrap{width:min(1240px,calc(100% - 48px));margin:0 auto}
     .topbar{position:sticky;top:0;z-index:60;backdrop-filter:blur(16px) saturate(1.6);background:rgba(10,13,26,.72);border-bottom:1px solid rgba(148,163,210,.12)}
     .topbar-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
-    .brand{display:flex;align-items:center;gap:11px};.brand:hover{opacity:.85}
+    .brand{display:flex;align-items:center;gap:11px}.brand:hover{opacity:.85}
     .brand-mark{width:40px;height:40px;border-radius:13px}
     .brand-name{font-size:18px;font-weight:800}
     .brand-sub{font-size:11px;color:var(--ink-3);font-weight:500}
@@ -46,7 +49,7 @@
   </style>
   <!-- Theme detection (minified, non-blocking) -->
   <script>
-    !function(){try{var t=localStorage.getItem("ipo-theme");document.documentElement.dataset.theme=t||(window.matchMedia&&(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))||"dark"}catch(e){document.documentElement.dataset.theme="dark"};var m=location.pathname.match(/^(.*?)(\/ipo\/.*)$/);window.IPO_BASE=m&&m[1]?m[1]+'/':'/'}();
+    !function(){try{var t=localStorage.getItem("ipo-theme");document.documentElement.dataset.theme=t||(window.matchMedia&&(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))||"dark"}catch(e){document.documentElement.dataset.theme="dark"};var b="%BASE%";window.IPO_BASE=b.charAt(0)==="/"?b:"/"}();
   </script>
   <!-- Preload the app script so it is discovered without waiting for parser end -->
   <link rel="preload" href="%BASE%app.js" as="script" />
@@ -57,7 +60,7 @@
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
-      <a href="/" class="brand" data-link>
+      <a href="%BASE%" class="brand" data-link>
         <span class="brand-mark">
           <img alt="IPO India logo" src="%BASE%icons/logo-mark.png" width="40" height="40" loading="eager" fetchpriority="high" decoding="async" />
         </span>

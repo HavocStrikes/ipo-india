@@ -44,76 +44,21 @@ import {
   unsubscribeToken,
 } from './subscribers.js';
 import { sendMail, welcomeEmail, isMailConfigured, providerName } from './mail.js';
-import { isNotableName } from './notable.js';
+import { isNotableName } from '../../lib/notable.js';
 import { runMainboardAlerts, mainboardAlertStatus } from './mainboard-alerts.js';
 import { fetchBseData, verifyIpo, verifyState } from '../../lib/verify.js';
+import { countKnown, summarize, inWindow } from '../../lib/wire.js';
+import { invalidLinkPage, unsubscribedPage } from '../../lib/unsubscribe-pages.js';
 
 
 const DETAIL_TTL_SECONDS = 30 * 60; // scraped detail + merged record cache
 
-const nameMatches = isNotableName; // shared watchlist (worker/src/notable.js)
+const nameMatches = isNotableName; // shared watchlist (lib/notable.js)
 
 function windowDays(env) {
   return Number(env.WINDOW_DAYS || 31);
 }
 
-/** True if the IPO's key date falls inside the curated window for its status. */
-function inWindow(ipo, status, env, now = new Date()) {
-  const wd = windowDays(env);
-  const day = 86400000;
-  const t = now.toISOString().slice(0, 10);
-  const from = new Date(now.getTime() - wd * day).toISOString().slice(0, 10);
-  const to = new Date(now.getTime() + wd * day).toISOString().slice(0, 10);
-  if (status === 'upcoming') return !!ipo.openDate && ipo.openDate >= t && ipo.openDate <= to;
-  if (status === 'listed') return !!ipo.listingDate && ipo.listingDate <= t && ipo.listingDate >= from;
-  if (status === 'closed') return !!ipo.closeDate && ipo.closeDate < t && ipo.closeDate >= from;
-  return true;
-}
-
-function countKnown(ipo) {
-  let n = 0;
-  if (ipo.closeDate) n++;
-  if (ipo.listingDate) n++;
-  if (ipo.subscriptionX !== null && ipo.subscriptionX !== undefined) n++;
-  if (ipo.financials && ipo.financials.patCr !== null) n++;
-  if (ipo.kpi && ipo.kpi.pePost !== null) n++;
-  return n;
-}
-
-/**
- * Project an IPO (full record OR an already-summarized list entry) down to the
- * wire shape used by /api/ipos and /api/notable. Tolerant of both shapes so it
- * can be applied idempotently.
- */
-function summarize(ipo) {
-  return {
-    id: ipo.id,
-    name: ipo.name,
-    slug: ipo.slug ?? null,
-    category: ipo.category ?? null,
-    exchange: ipo.exchange ?? null,
-    status: ipo.status,
-    openDate: ipo.openDate ?? null,
-    closeDate: ipo.closeDate ?? null,
-    allotmentDate: ipo.allotmentDate ?? null,
-    listingDate: ipo.listingDate ?? null,
-    issuePrice: ipo.issuePrice ?? null,
-    issueAmountCr: ipo.issueAmountCr ?? null,
-    subscriptionX: ipo.subscriptionX ?? null,
-    liveSub: ipo.liveSub ?? null,
-    listingGainPct: ipo.listingGainPct ?? (ipo.listing && ipo.listing.gainPct) ?? null,
-    listingOpenPrice: ipo.listingOpenPrice ?? (ipo.listing && ipo.listing.openPrice) ?? null,
-    marketPrice: ipo.marketPrice ?? (ipo.market && ipo.market.price) ?? null,
-    pePost: ipo.pePost ?? (ipo.kpi && ipo.kpi.pePost) ?? null,
-    ronw: ipo.ronw ?? (ipo.kpi && (ipo.kpi.ronw ?? ipo.kpi.roe)) ?? null,
-    score: ipo.score
-      ? { score: ipo.score.score, tone: ipo.score.tone, confidence: ipo.score.confidence, pillars: ipo.score.pillars || null }
-      : null,
-    detailUrl: ipo.detailUrl ?? null,
-    nseSymbol: ipo.nseSymbol ?? null,
-    known: ipo.known ?? countKnown(ipo),
-  };
-}
 
 // ---- tiny JSON/KV helpers -------------------------------------------------
 
@@ -534,7 +479,7 @@ async function handleApi(request, env, ctx, url) {
     let rows = ds.ipos;
     if (status && status !== 'all') rows = rows.filter((i) => i.status === status);
     if (!showAll && status && status !== 'all' && status !== 'open') {
-      rows = rows.filter((i) => inWindow(i, status, env));
+      rows = rows.filter((i) => inWindow(i, status, windowDays(env)));
     }
     if (category && category !== 'all') {
       rows = rows.filter((i) => (i.category || '').toLowerCase() === category.toLowerCase());
@@ -625,7 +570,7 @@ async function handleApi(request, env, ctx, url) {
     const ds = await mergedSummaries(env);
     const counts = { open: 0, upcoming: 0, closed: 0, listed: 0 };
     ds.ipos.forEach((i) => {
-      if (counts[i.status] !== undefined && inWindow(i, i.status, env)) counts[i.status]++;
+      if (counts[i.status] !== undefined && inWindow(i, i.status, windowDays(env))) counts[i.status]++;
     });
     const vdoc = await getJson(env, 'verify:bse');
     return json({
@@ -680,21 +625,9 @@ async function handleApi(request, env, ctx, url) {
     const token = url.searchParams.get('token') || '';
     const expected = await unsubscribeToken(env, email);
     const valid = isValidEmail(email) && token && token === expected;
-    const emailEsc = email.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    if (!valid) {
-      return htmlPage(
-        '<!doctype html><html><head><meta charset="utf-8"><title>IPO India</title></head><body style="font-family:Arial,sans-serif;background:#f4f6fd;color:#0e1428;display:grid;place-items:center;min-height:100vh;margin:0"><div style="text-align:center;padding:24px"><h1>Invalid link</h1><p style="color:#4a546e">This unsubscribe link is broken or incomplete.</p></div></body></html>',
-        400
-      );
-    }
+    if (!valid) return htmlPage(invalidLinkPage(), 400);
     const result = await removeSubscriber(env, email);
-    return htmlPage(
-      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed — IPO India</title></head>` +
-        `<body style="font-family:Arial,sans-serif;background:#f4f6fd;color:#0e1428;display:grid;place-items:center;min-height:100vh;margin:0">` +
-        `<div style="text-align:center;padding:24px"><div style="font-size:40px">✓</div><h1 style="margin:8px 0">You&rsquo;re unsubscribed</h1>` +
-        `<p style="color:#4a546e">${result.removed ? `<b>${emailEsc}</b> has been removed from the IPO India mailing list.` : 'This address was not on the mailing list.'}</p>` +
-        `<p style="font-size:12px;color:#8a94ad">Sorry to see you go — you can always resubscribe on the site.</p></div></body></html>`
-    );
+    return htmlPage(unsubscribedPage({ removed: result.removed, email }));
   }
 
 
@@ -708,7 +641,19 @@ export default {
     try {
       if (p === '/healthz') return json({ ok: true });
       if (p === '/api' || p.startsWith('/api/')) return await handleApi(request, env, ctx, url);
-      return env.ASSETS.fetch(request);
+      // Static assets: substitute the %BASE% placeholder in HTML. The Worker
+      // hosts the site at the domain root; GitHub Pages rewrites it at deploy
+      // time and server.js rewrites it at request time (BASE_PATH).
+      const assetRes = await env.ASSETS.fetch(request);
+      const ct = assetRes.headers.get('content-type') || '';
+      if (assetRes.ok && ct.includes('text/html')) {
+        const html = await assetRes.text();
+        const headers = new Headers(assetRes.headers);
+        headers.delete('content-length');
+        headers.delete('content-encoding');
+        return new Response(html.replace(/%BASE%/g, '/'), { status: assetRes.status, headers });
+      }
+      return assetRes;
     } catch (err) {
       console.error('[error]', p, err);
       return json({ error: String((err && err.message) || err) }, 500);

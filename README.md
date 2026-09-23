@@ -30,6 +30,7 @@ Environment options:
 | `REFRESH_MINUTES` | `10`    | How often live data is re-fetched         |
 | `HISTORY_YEARS`   | `1`     | Years of listed-IPO history to keep       |
 | `WINDOW_DAYS`     | `31`    | Curated window for upcoming/listed/closed |
+| `BASE_PATH`       | `/`     | Base path substituted for `%BASE%` in index.html (GitHub Pages sets it at deploy) |
 
 ## Run on Cloudflare Workers (free, always-on, no PC needed)
 
